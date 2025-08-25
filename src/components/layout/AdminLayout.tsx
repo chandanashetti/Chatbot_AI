@@ -35,7 +35,7 @@ const NAVIGATION_CONFIG = [
   { name: 'Analytics', href: '/admin/analytics', icon: BarChart3, roles: ['admin', 'superadmin', 'manager'] },
   { name: 'Knowledge Base', href: '/admin/knowledge-base', icon: FileText, roles: ['admin', 'superadmin', 'manager'] },
   { name: 'Logs', href: '/admin/logs', icon: List, roles: ['admin', 'superadmin'] },
-  { name: 'Settings', href: '/admin/settings', icon: Settings, roles: ['superadmin'] },
+  { name: 'Settings', href: '/admin/settings', icon: Settings, roles: ['admin', 'superadmin'] },
 ]
 
 const AdminLayout: React.FC = () => {

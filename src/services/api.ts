@@ -4,7 +4,7 @@ import { logout } from '../store/slices/authSlice'
 
 // Create axios instance
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || 'http://localhost:8000/api',
+  baseURL: import.meta.env.VITE_API_URL || 'http://localhost:5000/api',
   timeout: 10000,
 })
 
@@ -45,10 +45,11 @@ export const authAPI = {
 
 // Chat API
 export const chatAPI = {
-  sendMessage: (message: { content: string; sessionId?: string; attachments?: File[] }) => {
+  sendMessage: (message: { content: string; sessionId?: string; attachments?: File[]; model?: string }) => {
     const formData = new FormData()
     formData.append('content', message.content)
     if (message.sessionId) formData.append('sessionId', message.sessionId)
+    if (message.model) formData.append('model', message.model)
     if (message.attachments) {
       message.attachments.forEach(file => formData.append('attachments', file))
     }
@@ -103,6 +104,19 @@ export const settingsAPI = {
   updateSettings: (settings: any) => api.put('/settings', settings),
   
   getModels: () => api.get('/settings/models'),
+}
+
+// Web Scraping API
+export const webScrapingAPI = {
+  getSettings: () => api.get('/web-scraping/settings'),
+  updateSettings: (settings: any) => api.put('/web-scraping/settings', settings),
+  addUrl: (url: string, name: string, description?: string) => 
+    api.post('/web-scraping/urls', { url, name, description }),
+  removeUrl: (id: string) => api.delete(`/web-scraping/urls/${id}`),
+  scrapeUrl: (id: string) => api.post(`/web-scraping/scrape/${id}`),
+  getScrapedContent: () => api.get('/web-scraping/content'),
+  searchWebContent: (query: string, topK = 5) => 
+    api.post('/web-scraping/search', { query, topK }),
 }
 
 // Logs API
@@ -341,6 +355,49 @@ export const ragAPI = {
 
   // Health check
   ragHealthCheck: () => api.get('/rag/health')
+}
+
+// OpenAI API
+export const openaiAPI = {
+  // Chat
+  chat: (message: string, options?: {
+    model?: string
+    temperature?: number
+    maxTokens?: number
+    systemPrompt?: string
+  }) => api.post('/openai/chat', { message, ...options }),
+
+  // RAG Chat
+  ragChat: (message: string, options?: {
+    useRAG?: boolean
+    topK?: number
+    model?: string
+    temperature?: number
+    maxTokens?: number
+  }) => api.post('/openai/rag-chat', { message, ...options }),
+
+  // Embeddings
+  createEmbedding: (text: string, model?: string) =>
+    api.post('/openai/embeddings', { text, model }),
+
+  // Test connection
+  testConnection: () => api.post('/openai/test'),
+
+  // Available models
+  getModels: () => Promise.resolve({
+    data: {
+      chat: [
+        { id: 'gpt-3.5-turbo', name: 'GPT-3.5 Turbo', description: 'Fast and cost-effective' },
+        { id: 'gpt-4', name: 'GPT-4', description: 'Most capable model' },
+        { id: 'gpt-4-turbo', name: 'GPT-4 Turbo', description: 'Latest GPT-4 with improved performance' },
+      ],
+      embedding: [
+        { id: 'text-embedding-ada-002', name: 'Ada v2', description: 'Most capable embedding model' },
+        { id: 'text-embedding-3-small', name: 'Embedding v3 Small', description: 'Smaller, faster embedding model' },
+        { id: 'text-embedding-3-large', name: 'Embedding v3 Large', description: 'Most capable embedding model' },
+      ]
+    }
+  })
 }
 
 export default api

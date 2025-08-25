@@ -57,6 +57,9 @@ const knowledgeBaseSlice = createSlice({
     clearDocuments: (state) => {
       state.documents = []
     },
+    setDocuments: (state, action: PayloadAction<Document[]>) => {
+      state.documents = action.payload
+    },
   },
 })
 
@@ -68,6 +71,7 @@ export const {
   setUploadProgress, 
   clearUploadProgress, 
   setError, 
-  clearDocuments 
+  clearDocuments,
+  setDocuments 
 } = knowledgeBaseSlice.actions
 export default knowledgeBaseSlice.reducer

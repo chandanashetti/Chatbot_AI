@@ -10,7 +10,7 @@ class WebSocketService {
   connect(sessionId?: string) {
     if (this.socket?.connected) return
 
-    const wsUrl = import.meta.env.VITE_WS_URL || 'http://localhost:8000'
+    const wsUrl = import.meta.env.VITE_WS_URL || 'http://localhost:5000'
     
     this.socket = io(wsUrl, {
       auth: {

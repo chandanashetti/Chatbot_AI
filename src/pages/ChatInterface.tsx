@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from 'react'
 import { useSelector, useDispatch } from 'react-redux'
 import { RootState } from '../store/store'
 import { addMessage, clearChat } from '../store/slices/chatSlice'
-import { chatAPI, ragAPI } from '../services/api'
+import { chatAPI, ragAPI, openaiAPI } from '../services/api'
 import wsService from '../services/websocket'
 import { Send, Paperclip, X, Bot, User, Loader2, Sparkles, MessageCircle, Zap, ArrowLeft, Database, Brain } from 'lucide-react'
 import { useTheme } from '../components/providers/ThemeProvider'
@@ -77,8 +77,48 @@ const ChatInterface = () => {
       let response
       let ragResults = []
       
+      // Use OpenAI if enabled
+      if (settings.model === 'openai' && settings.openai.enabled) {
+        try {
+          if (settings.openai.ragEnabled && useRAG) {
+            // Search for relevant documents first
+            setIsSearching(true)
+            const searchResponse = await ragAPI.searchSimilar(messageToSend, {
+              topK: settings.openai.topK,
+              minScore: 0.7
+            })
+            ragResults = searchResponse.data || []
+            setIsSearching(false)
+            
+            // Send to OpenAI RAG chat endpoint
+            response = await openaiAPI.ragChat(messageToSend, {
+              useRAG: true,
+              topK: settings.openai.topK,
+              model: settings.openai.model,
+              temperature: settings.openai.temperature,
+              maxTokens: settings.openai.maxTokens
+            })
+          } else {
+            // Regular OpenAI chat
+            response = await openaiAPI.chat(messageToSend, {
+              model: settings.openai.model,
+              temperature: settings.openai.temperature,
+              maxTokens: settings.openai.maxTokens,
+              systemPrompt: settings.promptTemplate
+            })
+          }
+        } catch (openaiError) {
+          console.error('OpenAI failed, falling back to regular chat:', openaiError)
+          setIsSearching(false)
+          // Fallback to regular chat
+          response = await chatAPI.sendMessage({
+            content: messageToSend,
+            attachments
+          })
+        }
+      }
       // Use RAG if Ollama is enabled and RAG is enabled
-      if (settings.model === 'ollama' && settings.ollama.ragEnabled && useRAG) {
+      else if (settings.model === 'ollama' && settings.ollama.ragEnabled && useRAG) {
         try {
           // Search for relevant documents first
           setIsSearching(true)
@@ -110,7 +150,8 @@ const ChatInterface = () => {
         // Regular chat API
         response = await chatAPI.sendMessage({
           content: messageToSend,
-          attachments
+          attachments,
+          model: settings.model
         })
       }
       

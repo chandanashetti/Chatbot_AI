@@ -1,7 +1,7 @@
 import { useState, useCallback, useEffect } from 'react'
 import { useSelector, useDispatch } from 'react-redux'
 import { RootState } from '../../store/store'
-import { addDocument, updateDocument, removeDocument, setUploadProgress } from '../../store/slices/knowledgeBaseSlice'
+import { addDocument, updateDocument, removeDocument, setUploadProgress, setDocuments } from '../../store/slices/knowledgeBaseSlice'
 import { 
   addVectorDocument, 
   removeVectorDocument,
@@ -47,6 +47,35 @@ const KnowledgeBase = () => {
   const [uploading, setUploading] = useState(false)
   const [activeTab, setActiveTab] = useState<'documents' | 'search' | 'embeddings'>('documents')
   const [searchInput, setSearchInput] = useState('')
+
+  // Load existing documents on component mount
+  useEffect(() => {
+    const loadDocuments = async () => {
+      try {
+        const response = await knowledgeBaseAPI.getDocuments()
+        const docs = response.data.documents || []
+        
+        // Transform backend documents to frontend format
+        const transformedDocs = docs.map((doc: any) => ({
+          id: doc.id,
+          name: doc.name,
+          type: doc.type,
+          size: doc.size,
+          uploadedAt: new Date(doc.uploadedAt),
+          status: doc.status || 'indexed',
+          indexedAt: doc.indexedAt ? new Date(doc.indexedAt) : undefined
+        }))
+        
+        // Set all documents at once (more efficient)
+        dispatch(setDocuments(transformedDocs))
+      } catch (error) {
+        console.error('Failed to load documents:', error)
+        toast.error('Failed to load existing documents')
+      }
+    }
+
+    loadDocuments()
+  }, [dispatch])
 
   const onDrop = useCallback(async (acceptedFiles: File[]) => {
     setUploading(true)

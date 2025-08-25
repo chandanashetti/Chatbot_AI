@@ -14,10 +14,59 @@ export interface OllamaSettings {
   topK: number
 }
 
+export interface OpenAISettings {
+  enabled: boolean
+  apiKey: string
+  model: string
+  embeddingModel: string
+  temperature: number
+  maxTokens: number
+  ragEnabled: boolean
+  topK: number
+}
+
+export interface UrlSource {
+  id: string
+  url: string
+  name: string
+  description: string
+  enabled: boolean
+  lastScraped?: Date
+  scrapingStatus: 'pending' | 'success' | 'error' | 'disabled'
+  errorMessage?: string
+  contentLength: number
+  addedAt: Date
+}
+
+export interface WebScrapingSettings {
+  enabled: boolean
+  urls: UrlSource[]
+  cacheTimeout: number
+  maxUrls: number
+  requestTimeout: number
+  userAgent: string
+  respectRobotsTxt: boolean
+  maxContentLength: number
+  allowedDomains: string[]
+  blockedDomains: string[]
+}
+
+export interface ChatWidgetSettings {
+  enabled: boolean
+  title: string
+  initialMessage: string
+  placeholder: string
+  position: 'bottom-right' | 'bottom-left' | 'top-right' | 'top-left'
+  theme: 'light' | 'dark' | 'auto'
+  showOnLanding: boolean
+  showOnAllPages: boolean
+  hiddenPages: string[]
+}
+
 export interface BotSettings {
   temperature: number
   maxTokens: number
-  model: 'gpt-3.5-turbo' | 'gpt-4' | 'claude-3' | 'bedrock' | 'ollama'
+  model: 'gpt-3.5-turbo' | 'gpt-4' | 'claude-3' | 'bedrock' | 'ollama' | 'openai'
   fallbackMessage: string
   greetingMessage: string
   promptTemplate: string
@@ -28,6 +77,9 @@ export interface BotSettings {
     backgroundColor: string
   }
   ollama: OllamaSettings
+  openai: OpenAISettings
+  webScraping: WebScrapingSettings
+  chatWidget: ChatWidgetSettings
 }
 
 interface SettingsState {
@@ -69,6 +121,39 @@ Please provide a comprehensive answer based on the information in the documents.
       chunkSize: 1000,
       chunkOverlap: 200,
       topK: 5
+    },
+    openai: {
+      enabled: true,
+      apiKey: '',
+      model: 'gpt-3.5-turbo',
+      embeddingModel: 'text-embedding-ada-002',
+      temperature: 0.7,
+      maxTokens: 1000,
+      ragEnabled: true,
+      topK: 5
+    },
+    webScraping: {
+      enabled: false,
+      urls: [],
+      cacheTimeout: 3600000, // 1 hour
+      maxUrls: 10,
+      requestTimeout: 10000,
+      userAgent: 'Mozilla/5.0 (compatible; Chatbot-AI/1.0)',
+      respectRobotsTxt: true,
+      maxContentLength: 100000,
+      allowedDomains: [],
+      blockedDomains: []
+    },
+    chatWidget: {
+      enabled: true,
+      title: 'AI Assistant',
+      initialMessage: 'Hi! How can I help you today?',
+      placeholder: 'Type your message...',
+      position: 'bottom-right',
+      theme: 'auto',
+      showOnLanding: true,
+      showOnAllPages: false,
+      hiddenPages: ['/admin', '/chat']
     }
   },
   isLoading: false,
@@ -95,6 +180,25 @@ const settingsSlice = createSlice({
     updateOllamaSettings: (state, action: PayloadAction<Partial<OllamaSettings>>) => {
       state.settings.ollama = { ...state.settings.ollama, ...action.payload }
     },
+    updateOpenAISettings: (state, action: PayloadAction<Partial<OpenAISettings>>) => {
+      state.settings.openai = { ...state.settings.openai, ...action.payload }
+    },
+    updateWebScrapingSettings: (state, action: PayloadAction<Partial<WebScrapingSettings>>) => {
+      state.settings.webScraping = { ...state.settings.webScraping, ...action.payload }
+    },
+    addUrl: (state, action: PayloadAction<UrlSource>) => {
+      state.settings.webScraping.urls.push(action.payload)
+    },
+    removeUrl: (state, action: PayloadAction<string>) => {
+      state.settings.webScraping.urls = state.settings.webScraping.urls.filter(url => url.id !== action.payload)
+    },
+    updateUrl: (state, action: PayloadAction<{ id: string; updates: Partial<UrlSource> }>) => {
+      const { id, updates } = action.payload
+      const index = state.settings.webScraping.urls.findIndex(url => url.id === id)
+      if (index !== -1) {
+        state.settings.webScraping.urls[index] = { ...state.settings.webScraping.urls[index], ...updates }
+      }
+    },
     setError: (state, action: PayloadAction<string | null>) => {
       state.error = action.payload
     },
@@ -110,6 +214,11 @@ export const {
   updateSettings, 
   updateTheme, 
   updateOllamaSettings,
+  updateOpenAISettings,
+  updateWebScrapingSettings,
+  addUrl,
+  removeUrl,
+  updateUrl,
   setError, 
   resetSettings 
 } = settingsSlice.actions

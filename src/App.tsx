@@ -17,6 +17,7 @@ import Logs from './pages/admin/Logs'
 import Analytics from './pages/admin/Analytics'
 import AdminSettings from './pages/admin/Settings'
 import ThemeProvider from './components/providers/ThemeProvider'
+import GlobalChatWidget from './components/widgets/GlobalChatWidget'
 
 function App() {
   const { isAuthenticated } = useSelector((state: RootState) => state.auth)
@@ -51,6 +52,9 @@ function App() {
           {/* Fallback */}
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
+        
+        {/* Global Chat Widget - appears on all pages where enabled */}
+        <GlobalChatWidget />
       </div>
     </ThemeProvider>
   )
