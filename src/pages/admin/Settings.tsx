@@ -264,7 +264,7 @@ const AdminSettings = () => {
             ...localSettings.webScraping,
             urls: localSettings.webScraping.urls.map(url => 
               url.id === urlId 
-                ? { ...url, scrapingStatus: 'success', lastScraped: new Date(), contentLength: result.contentLength }
+                ? { ...url, scrapingStatus: 'success' as const, lastScraped: new Date(), contentLength: result.contentLength }
                 : url
             )
           }

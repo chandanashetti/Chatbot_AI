@@ -2,9 +2,7 @@ import {
   Ticket, 
   TicketAgent, 
   TicketPriority, 
-  TicketStatus, 
   TicketTier, 
-  TicketSource,
   Platform,
   KnowledgeBaseEntry,
   TicketEscalation 
@@ -187,7 +185,7 @@ export class TicketService {
       : 0;
 
     // Try to assign to appropriate agent
-    const assignedAgent = this.assignmentService.findBestAgent(tier, chatSession.tags);
+    const assignedAgent = this.assignmentService.findBestAgent(tier, chatSession.tags) || undefined;
 
     // Calculate SLA deadline based on priority
     const slaDeadline = this.calculateSLADeadline(priority);
@@ -257,7 +255,7 @@ export class TicketService {
     };
 
     // Try to find new agent for escalated tier
-    const newAgent = this.assignmentService.findBestAgent(newTier, ticket.tags);
+    const newAgent = this.assignmentService.findBestAgent(newTier, ticket.tags) || undefined;
 
     // Update ticket
     const escalatedTicket: Ticket = {
