@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   Search,
   Filter,
@@ -104,12 +105,26 @@ export interface Ticket {
 }
 
 const TicketManagement = () => {
+  const navigate = useNavigate();
   const [tickets, setTickets] = useState<Ticket[]>([]);
   const [selectedTicket, setSelectedTicket] = useState<Ticket | null>(null);
   const [filterTier, setFilterTier] = useState<TicketTier | 'all'>('all');
   const [filterStatus, setFilterStatus] = useState<TicketStatus | 'all'>('all');
   const [filterPriority, setFilterPriority] = useState<TicketPriority | 'all'>('all');
   const [searchTerm, setSearchTerm] = useState('');
+
+  // Platform configuration
+  const platforms = [
+    { id: 'all' as const, name: 'All Platforms', icon: MessageSquare, color: 'gray' },
+    { id: 'line' as const, name: 'LINE', icon: MessageCircle, color: 'green' },
+    { id: 'facebook' as const, name: 'Facebook', icon: MessageCircle, color: 'blue' },
+    { id: 'instagram' as const, name: 'Instagram', icon: Instagram, color: 'pink' },
+    { id: 'discord' as const, name: 'Discord', icon: Hash, color: 'indigo' },
+    { id: 'whatsapp' as const, name: 'WhatsApp', icon: Phone, color: 'green' },
+    { id: 'telegram' as const, name: 'Telegram', icon: Zap, color: 'blue' },
+    { id: 'web' as const, name: 'Web Chat', icon: MessageSquare, color: 'gray' },
+    { id: 'other' as const, name: 'Other', icon: MessageCircle, color: 'gray' }
+  ];
 
   // Mock agents data
   const agents: TicketAgent[] = [
@@ -450,6 +465,9 @@ const TicketManagement = () => {
                     <div className="flex items-center space-x-2">
                       <span className="font-medium text-gray-900 dark:text-white">{ticket.id}</span>
                       <PlatformIcon className="h-4 w-4 text-primary-500" />
+                      <span className="text-xs px-2 py-0.5 bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300 rounded-full font-medium">
+                        {platforms.find(p => p.id === ticket.platform)?.name || ticket.platform?.toUpperCase() || 'Unknown'}
+                      </span>
                     </div>
                     <div className="flex items-center space-x-1">
                       <span className={`px-2 py-0.5 text-xs rounded-full ${getTierColor(ticket.tier)}`}>
@@ -465,7 +483,7 @@ const TicketManagement = () => {
                     {ticket.title}
                   </h3>
 
-                  <div className="flex items-center justify-between text-sm text-gray-500">
+                  <div className="flex items-center justify-between text-sm text-gray-500 mb-2">
                     <div className="flex items-center space-x-2">
                       <User className="h-4 w-4" />
                       <span>{ticket.customerName}</span>
@@ -474,6 +492,28 @@ const TicketManagement = () => {
                       {ticket.status.replace('_', ' ').toUpperCase()}
                     </span>
                   </div>
+
+                  {/* Chat Session Information */}
+                  {ticket.chatSessionId && (
+                    <div className="flex items-center justify-between text-xs text-gray-500 mb-2 bg-gray-50 dark:bg-gray-800 px-2 py-1 rounded">
+                      <div className="flex items-center">
+                        <MessageSquare className="h-3 w-3 mr-1" />
+                        <span className="font-medium">Chat Session:</span>
+                        <span className="ml-1 font-mono text-gray-700 dark:text-gray-300">#{ticket.chatSessionId}</span>
+                        <span className="mx-2">•</span>
+                        <span>Source: {ticket.source}</span>
+                      </div>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation(); // Prevent ticket selection
+                          navigate(`/admin/chats?chatId=${ticket.chatSessionId}`);
+                        }}
+                        className="text-primary-600 hover:text-primary-800 dark:text-primary-400 dark:hover:text-primary-300 font-medium hover:underline"
+                      >
+                        View
+                      </button>
+                    </div>
+                  )}
 
                   <div className="flex items-center justify-between mt-2 text-xs text-gray-500">
                     <div className="flex items-center space-x-1">
@@ -534,6 +574,15 @@ const TicketManagement = () => {
                     </p>
                   </div>
                   <div className="flex space-x-2">
+                    {selectedTicket.chatSessionId && (
+                      <button 
+                        onClick={() => navigate(`/admin/chats?chatId=${selectedTicket.chatSessionId}`)}
+                        className="flex items-center px-3 py-1.5 text-sm bg-primary-100 text-primary-700 hover:bg-primary-200 dark:bg-primary-900/20 dark:text-primary-400 dark:hover:bg-primary-900/40 rounded-lg transition-colors"
+                      >
+                        <MessageSquare className="h-4 w-4 mr-1" />
+                        View Chat
+                      </button>
+                    )}
                     <button className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg">
                       <Edit3 className="h-5 w-5" />
                     </button>
@@ -544,24 +593,40 @@ const TicketManagement = () => {
                 </div>
 
                 {/* Customer & Assignment Info */}
-                <div className="grid grid-cols-2 gap-4 text-sm">
-                  <div>
-                    <span className="font-medium text-gray-900 dark:text-white">Customer:</span>
-                    <p className="text-gray-600 dark:text-gray-400">{selectedTicket.customerName}</p>
-                    {selectedTicket.customerEmail && (
-                      <p className="text-gray-500 text-xs">{selectedTicket.customerEmail}</p>
-                    )}
+                                  <div className="grid grid-cols-3 gap-4 text-sm">
+                    <div>
+                      <span className="font-medium text-gray-900 dark:text-white">Customer:</span>
+                      <p className="text-gray-600 dark:text-gray-400">{selectedTicket.customerName}</p>
+                      {selectedTicket.customerEmail && (
+                        <p className="text-gray-500 text-xs">{selectedTicket.customerEmail}</p>
+                      )}
+                    </div>
+                    <div>
+                      <span className="font-medium text-gray-900 dark:text-white">Platform & Source:</span>
+                      <div className="flex items-center space-x-2 mt-1">
+                        {(() => {
+                          const PlatformIcon = getPlatformIcon(selectedTicket.platform);
+                          return <PlatformIcon className="h-4 w-4 text-primary-500" />;
+                        })()}
+                        <span className="text-gray-600 dark:text-gray-400">
+                          {platforms.find(p => p.id === selectedTicket.platform)?.name || selectedTicket.platform?.toUpperCase()}
+                        </span>
+                      </div>
+                      <p className="text-gray-500 text-xs">Source: {selectedTicket.source}</p>
+                      {selectedTicket.chatSessionId && (
+                        <p className="text-gray-500 text-xs">Chat: #{selectedTicket.chatSessionId}</p>
+                      )}
+                    </div>
+                    <div>
+                      <span className="font-medium text-gray-900 dark:text-white">Assigned to:</span>
+                      <p className="text-gray-600 dark:text-gray-400">
+                        {selectedTicket.assignedAgent?.name || 'Unassigned'}
+                      </p>
+                      {selectedTicket.assignedAgent && (
+                        <p className="text-gray-500 text-xs">{selectedTicket.assignedAgent.email}</p>
+                      )}
+                    </div>
                   </div>
-                  <div>
-                    <span className="font-medium text-gray-900 dark:text-white">Assigned to:</span>
-                    <p className="text-gray-600 dark:text-gray-400">
-                      {selectedTicket.assignedAgent?.name || 'Unassigned'}
-                    </p>
-                    {selectedTicket.assignedAgent && (
-                      <p className="text-gray-500 text-xs">{selectedTicket.assignedAgent.email}</p>
-                    )}
-                  </div>
-                </div>
               </div>
 
               {/* AI Suggestions */}

@@ -9,6 +9,7 @@ import Dashboard from './pages/admin/Dashboard'
 import Integrations from './pages/admin/Integrations'
 import AgentManagement from './pages/admin/AgentManagement'
 import ChatReview from './pages/admin/ChatReview'
+import TicketManagement from './pages/admin/TicketManagement'
 import UserManagement from './pages/admin/UserManagement'
 import BotManagement from './pages/admin/BotManagement'
 import BotBuilder from './pages/admin/BotBuilder'
@@ -40,6 +41,7 @@ function App() {
             <Route path="integrations" element={<Integrations />} />
             <Route path="agents" element={<AgentManagement />} />
             <Route path="chats" element={<ChatReview />} />
+            <Route path="tickets" element={<TicketManagement />} />
             <Route path="users" element={<UserManagement />} />
             <Route path="bots" element={<BotManagement />} />
             <Route path="bots/:botId/builder" element={<BotBuilder />} />

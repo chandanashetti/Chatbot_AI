@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import {
   Search,
   Calendar,
@@ -45,6 +46,7 @@ interface ChatMessage {
 }
 
 const ChatReview = () => {
+  const [searchParams, setSearchParams] = useSearchParams();
   const [selectedChat, setSelectedChat] = useState<ChatSession | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [dateFilter, setDateFilter] = useState<'today' | 'week' | 'month'>('week');
@@ -832,6 +834,32 @@ const ChatReview = () => {
     }
   };
 
+  // Auto-select chat based on URL parameter
+  useEffect(() => {
+    const chatId = searchParams.get('chatId');
+    if (chatId && chatSessions.length > 0) {
+      const targetChat = chatSessions.find(chat => chat.id === chatId);
+      if (targetChat && (!selectedChat || selectedChat.id !== chatId)) {
+        setSelectedChat(targetChat);
+        
+        // Auto-scroll to the selected chat in the list
+        setTimeout(() => {
+          const chatElement = document.querySelector(`[data-chat-id="${chatId}"]`);
+          if (chatElement && chatListRef.current) {
+            chatElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          }
+        }, 100);
+
+        // Clear the URL parameter after selecting the chat
+        setSearchParams(prev => {
+          const newParams = new URLSearchParams(prev);
+          newParams.delete('chatId');
+          return newParams;
+        });
+      }
+    }
+  }, [chatSessions, searchParams, selectedChat, setSearchParams]);
+
   // Auto-scroll to bottom when chat changes or messages update
   useEffect(() => {
     if (selectedChat && messagesEndRef.current) {
@@ -910,7 +938,7 @@ const ChatReview = () => {
       </div>
 
       <div className="flex-1 flex">
-              {/* Left sidebar - Chat list */}
+      {/* Left sidebar - Chat list */}
         <div className="w-1/3 border-r border-gray-200 dark:border-gray-700 flex flex-col">
           <div className="p-4 border-b border-gray-200 dark:border-gray-700">
           {/* Search and filters */}
@@ -956,7 +984,7 @@ const ChatReview = () => {
             ref={chatListRef}
             className="flex-1 overflow-y-auto p-4 scrollbar-thin smooth-scroll"
           >
-            <div className="space-y-2">
+          <div className="space-y-2">
                           {filteredChats.map((chat) => {
               const PlatformIcon = getPlatformIcon(chat.platform);
               const ticket = getTicketForChat(chat.id);
@@ -964,9 +992,10 @@ const ChatReview = () => {
               return (
               <button
                 key={chat.id}
+                  data-chat-id={chat.id}
                 onClick={() => setSelectedChat(chat)}
                 className={`w-full text-left p-4 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 ${
-                  selectedChat?.id === chat.id ? 'bg-gray-50 dark:bg-gray-800' : ''
+                    selectedChat?.id === chat.id ? 'bg-primary-50 dark:bg-primary-900/20 ring-1 ring-primary-200 dark:ring-primary-800' : ''
                 }`}
               >
                 <div className="flex justify-between items-start mb-1">
