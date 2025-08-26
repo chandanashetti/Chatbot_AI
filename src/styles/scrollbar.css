@@ -1,0 +1,85 @@
+/* Custom Scrollbar Styles */
+
+/* Webkit browsers (Chrome, Safari, Edge) */
+.scrollbar-thin::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.scrollbar-thin::-webkit-scrollbar-track {
+  background: transparent;
+  border-radius: 3px;
+}
+
+.scrollbar-thin::-webkit-scrollbar-thumb {
+  background: rgba(156, 163, 175, 0.5);
+  border-radius: 3px;
+  transition: background 0.2s ease;
+}
+
+.scrollbar-thin::-webkit-scrollbar-thumb:hover {
+  background: rgba(156, 163, 175, 0.8);
+}
+
+/* Dark mode */
+.dark .scrollbar-thin::-webkit-scrollbar-thumb {
+  background: rgba(75, 85, 99, 0.5);
+}
+
+.dark .scrollbar-thin::-webkit-scrollbar-thumb:hover {
+  background: rgba(75, 85, 99, 0.8);
+}
+
+/* For the chat messages area - slightly wider scrollbar */
+.scrollbar-messages::-webkit-scrollbar {
+  width: 8px;
+}
+
+.scrollbar-messages::-webkit-scrollbar-track {
+  background: rgba(243, 244, 246, 0.5);
+  border-radius: 4px;
+}
+
+.scrollbar-messages::-webkit-scrollbar-thumb {
+  background: rgba(156, 163, 175, 0.6);
+  border-radius: 4px;
+  transition: background 0.2s ease;
+}
+
+.scrollbar-messages::-webkit-scrollbar-thumb:hover {
+  background: rgba(156, 163, 175, 0.9);
+}
+
+.dark .scrollbar-messages::-webkit-scrollbar-track {
+  background: rgba(31, 41, 55, 0.5);
+}
+
+.dark .scrollbar-messages::-webkit-scrollbar-thumb {
+  background: rgba(75, 85, 99, 0.6);
+}
+
+.dark .scrollbar-messages::-webkit-scrollbar-thumb:hover {
+  background: rgba(75, 85, 99, 0.9);
+}
+
+/* Hide scrollbar for platform tabs on small screens but keep functionality */
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+
+/* Smooth scrolling for all scrollable areas */
+.smooth-scroll {
+  scroll-behavior: smooth;
+}
+
+/* Custom focus styles for better accessibility */
+.scrollbar-thin:focus,
+.scrollbar-messages:focus {
+  outline: 2px solid rgba(59, 130, 246, 0.5);
+  outline-offset: 2px;
+}
