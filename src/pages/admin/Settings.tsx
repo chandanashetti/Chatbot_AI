@@ -164,6 +164,32 @@ const AdminSettings = () => {
     }))
   }
 
+  const clearOpenAIKey = async () => {
+    try {
+      // Clear the API key from local state
+      const clearedSettings = {
+        ...localSettings,
+        openai: {
+          ...localSettings.openai,
+          apiKey: ''
+        }
+      }
+      
+      setLocalSettings(clearedSettings)
+      
+      // Save the cleared settings to backend
+      const response = await settingsAPI.updateSettings(clearedSettings)
+      console.log('✅ OpenAI API key cleared successfully:', response)
+      
+      dispatch(updateSettings(clearedSettings))
+      toast.success('OpenAI API key cleared successfully')
+      setOpenaiStatus(null) // Reset connection status
+    } catch (error) {
+      console.error('❌ Error clearing OpenAI API key:', error)
+      toast.error('Failed to clear OpenAI API key')
+    }
+  }
+
   const handleWebScrapingChange = (field: keyof WebScrapingSettings, value: any) => {
     setLocalSettings((prev: BotSettings) => ({
       ...prev,
@@ -677,16 +703,32 @@ const AdminSettings = () => {
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                     API Key
                   </label>
+                  <div className="flex space-x-2">
                   <input
                     type="password"
                     value={localSettings.openai.apiKey}
                     onChange={(e) => handleOpenAIChange('apiKey', e.target.value)}
-                    className="input-field"
+                      className="input-field flex-1"
                     placeholder="sk-..."
                   />
+                    {localSettings.openai.apiKey && (
+                      <button
+                        onClick={clearOpenAIKey}
+                        className="btn-secondary text-sm px-3 py-2 text-red-600 hover:text-red-800 dark:text-red-400 dark:hover:text-red-300"
+                        title="Clear API Key"
+                      >
+                        Clear
+                      </button>
+                    )}
+                  </div>
                   <p className="text-xs text-gray-500 mt-1">
-                    Your OpenAI API key (stored securely)
+                    Your OpenAI API key (stored securely in database)
                   </p>
+                  {!localSettings.openai.apiKey && (
+                    <p className="text-xs text-amber-600 dark:text-amber-400 mt-1">
+                      ⚠️ No API key configured. OpenAI features will not work.
+                    </p>
+                  )}
                 </div>
 
                 <div>

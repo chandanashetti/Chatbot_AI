@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react'
-import { MessageCircle, X, Send, Minimize2, Maximize2, Bot } from 'lucide-react'
-import { chatAPI } from '../services/api'
+import { MessageCircle, X, Send, Minimize2, Maximize2, Bot, ThumbsUp, ThumbsDown, Volume2, VolumeX } from 'lucide-react'
+import { chatAPI, reactionsAPI } from '../services/api'
 import toast from 'react-hot-toast'
 
 interface Message {
@@ -40,6 +40,9 @@ const ChatWidget: React.FC<ChatWidgetProps> = ({
   const [inputMessage, setInputMessage] = useState('')
   const [isLoading, setIsLoading] = useState(false)
   const [sessionId] = useState(() => `widget-${Date.now()}`)
+  const [messageReactions, setMessageReactions] = useState<Record<string, 'like' | 'dislike' | null>>({})
+  const [speakingMessageId, setSpeakingMessageId] = useState<string | null>(null)
+  const [speechSynthesis, setSpeechSynthesis] = useState<SpeechSynthesis | null>(null)
   
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
@@ -57,6 +60,97 @@ const ChatWidget: React.FC<ChatWidgetProps> = ({
       inputRef.current.focus()
     }
   }, [isOpen, isMinimized])
+
+  useEffect(() => {
+    // Initialize speech synthesis
+    if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+      setSpeechSynthesis(window.speechSynthesis)
+    }
+
+    return () => {
+      // Stop any ongoing speech when component unmounts
+      if (speechSynthesis) {
+        speechSynthesis.cancel()
+      }
+    }
+  }, [])
+
+  // Handle message reactions
+  const handleReaction = async (messageId: string, reaction: 'like' | 'dislike') => {
+    try {
+      // Toggle reaction if same reaction is clicked, otherwise set new reaction
+      const currentReaction = messageReactions[messageId]
+      const newReaction = currentReaction === reaction ? null : reaction
+      
+      setMessageReactions(prev => ({
+        ...prev,
+        [messageId]: newReaction
+      }))
+
+      // Send reaction to backend
+      await reactionsAPI.submitReaction(messageId, newReaction, sessionId)
+      
+      if (newReaction) {
+        toast.success(`${newReaction === 'like' ? '👍' : '👎'} Feedback submitted`)
+      }
+    } catch (error) {
+      console.error('Failed to submit reaction:', error)
+      toast.error('Failed to submit feedback')
+    }
+  }
+
+  // Handle text-to-speech
+  const handleSpeakMessage = (messageId: string, content: string) => {
+    if (!speechSynthesis) {
+      toast.error('Text-to-speech not supported in this browser')
+      return
+    }
+
+    // Stop current speech if any
+    if (speakingMessageId) {
+      speechSynthesis.cancel()
+      setSpeakingMessageId(null)
+      if (speakingMessageId === messageId) {
+        return // If clicking the same message, just stop
+      }
+    }
+
+    try {
+      const utterance = new SpeechSynthesisUtterance(content)
+      utterance.rate = 0.9
+      utterance.pitch = 1
+      utterance.volume = 0.8
+      
+      // Set a pleasant voice if available
+      const voices = speechSynthesis.getVoices()
+      const preferredVoice = voices.find(voice => 
+        voice.name.includes('Google') || 
+        voice.name.includes('Microsoft') ||
+        voice.lang.includes('en')
+      )
+      if (preferredVoice) {
+        utterance.voice = preferredVoice
+      }
+
+      utterance.onstart = () => {
+        setSpeakingMessageId(messageId)
+      }
+
+      utterance.onend = () => {
+        setSpeakingMessageId(null)
+      }
+
+      utterance.onerror = () => {
+        setSpeakingMessageId(null)
+        toast.error('Failed to read message aloud')
+      }
+
+      speechSynthesis.speak(utterance)
+    } catch (error) {
+      console.error('Speech synthesis error:', error)
+      toast.error('Failed to read message aloud')
+    }
+  }
 
   const handleSendMessage = async () => {
     if (!inputMessage.trim() || isLoading) return
@@ -196,11 +290,66 @@ const ChatWidget: React.FC<ChatWidgetProps> = ({
                       }`}
                     >
                       <p className="text-sm leading-relaxed whitespace-pre-wrap">{message.content}</p>
-                      <p className={`text-xs mt-2 opacity-70 ${
-                        message.role === 'user' ? 'text-blue-100' : 'text-gray-500 dark:text-gray-400'
-                      }`}>
-                        {message.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                      </p>
+                      
+                      {/* Message Actions for Assistant Messages */}
+                      {message.role === 'assistant' && (
+                        <div className="flex items-center justify-between mt-3 pt-2 border-t border-gray-200/50 dark:border-gray-600/50">
+                          <div className="flex items-center space-x-2">
+                            {/* Like/Dislike Buttons */}
+                            <button
+                              onClick={() => handleReaction(message.id, 'like')}
+                              className={`p-1.5 rounded-lg transition-all duration-200 hover:scale-110 ${
+                                messageReactions[message.id] === 'like'
+                                  ? 'bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400'
+                                  : 'text-gray-400 dark:text-gray-500 hover:text-green-500 hover:bg-green-50 dark:hover:bg-green-900/20'
+                              }`}
+                              title="Like this response"
+                            >
+                              <ThumbsUp className="w-3.5 h-3.5" />
+                            </button>
+                            
+                            <button
+                              onClick={() => handleReaction(message.id, 'dislike')}
+                              className={`p-1.5 rounded-lg transition-all duration-200 hover:scale-110 ${
+                                messageReactions[message.id] === 'dislike'
+                                  ? 'bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400'
+                                  : 'text-gray-400 dark:text-gray-500 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20'
+                              }`}
+                              title="Dislike this response"
+                            >
+                              <ThumbsDown className="w-3.5 h-3.5" />
+                            </button>
+                            
+                            {/* Read Aloud Button */}
+                            <button
+                              onClick={() => handleSpeakMessage(message.id, message.content)}
+                              className={`p-1.5 rounded-lg transition-all duration-200 hover:scale-110 ${
+                                speakingMessageId === message.id
+                                  ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400'
+                                  : 'text-gray-400 dark:text-gray-500 hover:text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/20'
+                              }`}
+                              title={speakingMessageId === message.id ? 'Stop reading' : 'Read aloud'}
+                            >
+                              {speakingMessageId === message.id ? (
+                                <VolumeX className="w-3.5 h-3.5" />
+                              ) : (
+                                <Volume2 className="w-3.5 h-3.5" />
+                              )}
+                            </button>
+                          </div>
+                          
+                          <p className="text-xs opacity-70 text-gray-500 dark:text-gray-400">
+                            {message.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                          </p>
+                        </div>
+                      )}
+                      
+                      {/* Timestamp for User Messages */}
+                      {message.role === 'user' && (
+                        <p className="text-xs mt-2 opacity-70 text-blue-100">
+                          {message.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        </p>
+                      )}
                     </div>
                   </div>
                 ))}

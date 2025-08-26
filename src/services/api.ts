@@ -400,4 +400,14 @@ export const openaiAPI = {
   })
 }
 
+// Message Reactions API
+export const reactionsAPI = {
+  // Submit message reaction
+  submitReaction: (messageId: string, reaction: 'like' | 'dislike' | null, sessionId?: string) =>
+    api.post(`/messages/${messageId}/reaction`, { reaction, sessionId }),
+
+  // Get reaction analytics
+  getAnalytics: () => api.get('/messages/reactions/analytics'),
+}
+
 export default api

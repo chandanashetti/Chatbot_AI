@@ -25,9 +25,33 @@ const WebScraper = require('./services/webScraper');
 // OpenAI integration
 const OpenAI = require('openai');
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
+// Create a function to get OpenAI client with dynamic API key
+const getOpenAIClient = async () => {
+  let apiKey = null;
+  
+  // Try to get API key from database first
+  if (database.isConnected) {
+    try {
+      const settings = await Settings.findOne({ isDefault: true });
+      if (settings && settings.openai && settings.openai.apiKey) {
+        apiKey = settings.openai.apiKey;
+      }
+    } catch (error) {
+      console.error('Error fetching API key from database:', error);
+    }
+  }
+  
+  // Fallback to environment variable only if no database key found
+  if (!apiKey) {
+    apiKey = process.env.OPENAI_API_KEY;
+  }
+  
+  if (!apiKey) {
+    throw new Error('OpenAI API key not configured. Please set it in the admin settings.');
+  }
+  
+  return new OpenAI({ apiKey });
+};
 
 // Document processors
 const pdfParse = require('pdf-parse');
@@ -47,6 +71,66 @@ const PORT = process.env.PORT || 5000;
 // Middleware
 app.use(cors());
 app.use(express.json());
+
+// Message Reaction Routes
+app.post('/api/messages/:messageId/reaction', async (req, res) => {
+  try {
+    const { messageId } = req.params;
+    const { reaction, sessionId } = req.body; // reaction: 'like' | 'dislike' | null
+
+    console.log(`📝 Message reaction: ${messageId} -> ${reaction} (Session: ${sessionId})`);
+
+    // Here you would typically store the reaction in your database
+    // For now, we'll just log it and return success
+    
+    // Example: Store in database
+    // await MessageReaction.findOneAndUpdate(
+    //   { messageId, sessionId },
+    //   { reaction, timestamp: new Date() },
+    //   { upsert: true }
+    // );
+
+    res.json({
+      success: true,
+      messageId,
+      reaction,
+      timestamp: new Date().toISOString()
+    });
+
+  } catch (error) {
+    console.error('Error storing message reaction:', error);
+    res.status(500).json({
+      error: 'Failed to store message reaction',
+      details: error.message
+    });
+  }
+});
+
+// Get message reactions analytics (optional)
+app.get('/api/messages/reactions/analytics', async (req, res) => {
+  try {
+    // Here you would query your database for reaction analytics
+    // For now, return mock data
+    const analytics = {
+      totalReactions: 156,
+      likes: 124,
+      dislikes: 32,
+      likeRatio: 0.79,
+      recentReactions: [
+        { messageId: 'msg1', reaction: 'like', timestamp: new Date() },
+        { messageId: 'msg2', reaction: 'dislike', timestamp: new Date() },
+      ]
+    };
+
+    res.json(analytics);
+  } catch (error) {
+    console.error('Error fetching reaction analytics:', error);
+    res.status(500).json({
+      error: 'Failed to fetch reaction analytics',
+      details: error.message
+    });
+  }
+});
 
 // Socket.IO connection handling
 io.on('connection', (socket) => {
@@ -144,7 +228,7 @@ Please provide a comprehensive answer based on the information in the documents.
   },
   openai: {
     enabled: true,
-    apiKey: process.env.OPENAI_API_KEY || '',
+    apiKey: '',
     model: 'gpt-3.5-turbo',
     embeddingModel: 'text-embedding-ada-002',
     temperature: 0.7,
@@ -698,27 +782,10 @@ app.post('/api/openai/chat', async (req, res) => {
       return res.status(400).json({ error: 'Message is required' });
     }
 
-    // Get API key from database or environment
-    let apiKey = process.env.OPENAI_API_KEY;
-    if (database.isConnected) {
-      try {
-        const settings = await Settings.findOne({ isDefault: true });
-        if (settings && settings.openai && settings.openai.apiKey && settings.openai.apiKey !== '***masked***') {
-          apiKey = settings.openai.apiKey;
-        }
-      } catch (dbError) {
-        console.log('Using environment API key');
-      }
-    }
-
-    if (!apiKey) {
-      return res.status(500).json({ error: 'OpenAI API key not configured' });
-    }
+        // Create OpenAI client with dynamic API key
+    const openaiClient = await getOpenAIClient();
     
-    // Create OpenAI client with the correct API key
-    const tempOpenAI = new OpenAI({ apiKey: apiKey });
-    
-    const completion = await tempOpenAI.chat.completions.create({
+    const completion = await openaiClient.chat.completions.create({
       model,
       messages: [
         { role: 'system', content: systemPrompt },
@@ -761,22 +828,7 @@ app.post('/api/openai/rag-chat', async (req, res) => {
       return res.status(400).json({ error: 'Message is required' });
     }
 
-    // Get API key from database or environment
-    let apiKey = process.env.OPENAI_API_KEY;
-    if (database.isConnected) {
-      try {
-        const settings = await Settings.findOne({ isDefault: true });
-        if (settings && settings.openai && settings.openai.apiKey && settings.openai.apiKey !== '***masked***') {
-          apiKey = settings.openai.apiKey;
-        }
-      } catch (dbError) {
-        console.log('Using environment API key');
-      }
-    }
 
-    if (!apiKey) {
-      return res.status(500).json({ error: 'OpenAI API key not configured' });
-    }
     
     let context = '';
     let searchResults = [];
@@ -802,10 +854,10 @@ app.post('/api/openai/rag-chat', async (req, res) => {
       `You are a helpful assistant. Answer the user's question based on the provided documents. If the answer is not in the documents, say so clearly.\n\nRelevant documents:\n${context}` :
       'You are a helpful AI assistant.';
     
-    // Create OpenAI client with the correct API key
-    const tempOpenAI = new OpenAI({ apiKey: apiKey });
+    // Create OpenAI client with dynamic API key
+    const openaiClient = await getOpenAIClient();
     
-    const completion = await tempOpenAI.chat.completions.create({
+    const completion = await openaiClient.chat.completions.create({
       model,
       messages: [
         { role: 'system', content: systemPrompt },
@@ -842,11 +894,10 @@ app.post('/api/openai/embeddings', async (req, res) => {
       return res.status(400).json({ error: 'Text is required' });
     }
 
-    if (!process.env.OPENAI_API_KEY) {
-      return res.status(500).json({ error: 'OpenAI API key not configured' });
-    }
+
     
-    const embedding = await openai.embeddings.create({
+    const openaiClient = await getOpenAIClient();
+    const embedding = await openaiClient.embeddings.create({
       model,
       input: text,
     });
@@ -869,33 +920,10 @@ app.post('/api/openai/embeddings', async (req, res) => {
 // Test OpenAI connection
 app.post('/api/openai/test', async (req, res) => {
   try {
-    let apiKey = process.env.OPENAI_API_KEY;
+    // Use the dynamic OpenAI client
+    const openaiClient = await getOpenAIClient();
     
-    // Try to get API key from database settings if MongoDB is available
-    if (database.isConnected) {
-      try {
-        const settings = await Settings.findOne({ isDefault: true });
-        if (settings && settings.openai && settings.openai.apiKey && settings.openai.apiKey !== '***masked***') {
-          apiKey = settings.openai.apiKey;
-        }
-      } catch (dbError) {
-        console.log('Could not fetch API key from database, using environment variable');
-      }
-    }
-    
-    if (!apiKey) {
-      return res.status(400).json({ 
-        connected: false, 
-        error: 'OpenAI API key not configured. Please set it in Settings or environment variables.' 
-      });
-    }
-    
-    // Create a temporary OpenAI client with the API key
-    const tempOpenAI = new OpenAI({
-      apiKey: apiKey,
-    });
-    
-    const completion = await tempOpenAI.chat.completions.create({
+    const completion = await openaiClient.chat.completions.create({
       model: 'gpt-3.5-turbo',
       messages: [{ role: 'user', content: 'Hello' }],
       max_tokens: 5,
@@ -946,22 +974,18 @@ app.post('/api/chat/send', upload.array('attachments'), async (req, res) => {
     
     // Get settings for RAG and OpenAI configuration
     let settings = null;
-    let apiKey = process.env.OPENAI_API_KEY;
     
     if (database.isConnected) {
       try {
         settings = await Settings.findOne({ isDefault: true });
-        if (settings && settings.openai && settings.openai.apiKey && settings.openai.apiKey !== '***masked***') {
-          apiKey = settings.openai.apiKey;
-        }
       } catch (dbError) {
-        console.log('Using environment API key for chat');
+        console.log('Could not fetch settings from database');
       }
     }
     
     // If OpenAI is configured, use it with RAG (check for OpenAI models)
     const isOpenAIModel = model === 'openai' || model.startsWith('gpt-') || model.includes('turbo');
-    if (apiKey && isOpenAIModel) {
+    if (isOpenAIModel) {
       try {
         const shouldUseRAG = useRAG === 'true' || useRAG === true;
         let context = '';
@@ -1105,8 +1129,8 @@ app.post('/api/chat/send', upload.array('attachments'), async (req, res) => {
           }
         }
         
-        // Create OpenAI client with the correct API key
-        const tempOpenAI = new OpenAI({ apiKey: apiKey });
+        // Create OpenAI client with dynamic API key
+        const openaiClient = await getOpenAIClient();
         
         // Generate system prompt based on RAG context
         const systemPrompt = context ? 
@@ -1122,7 +1146,7 @@ ${context}
 Please answer the user's question following the above guidelines.` :
           `You are a helpful AI assistant. I don't have access to a specific knowledge base for this query, so I'll provide a general response based on my training. ${settings?.promptTemplate || ''}`;
         
-        const completion = await tempOpenAI.chat.completions.create({
+        const completion = await openaiClient.chat.completions.create({
           model: settings?.openai?.model || 'gpt-3.5-turbo',
           messages: [
             { role: 'system', content: systemPrompt },
@@ -1271,7 +1295,7 @@ app.get('/api/settings', async (req, res) => {
       settings = new Settings({
         isDefault: true,
         openai: {
-          apiKey: process.env.OPENAI_API_KEY || ''
+          apiKey: '' // Will be set through frontend settings
         }
       });
       await settings.save();
@@ -1593,5 +1617,5 @@ server.listen(PORT, () => {
   console.log(`🔌 WebSocket: http://localhost:${PORT} (Socket.IO)`);
   console.log(`\n📊 Database: ${database.isConnected ? '✅ MongoDB Connected' : '❌ MongoDB Disconnected'}`);
   console.log(`⚡ Make sure Ollama is running on http://localhost:11434`);
-  console.log(`🔑 OpenAI API Key: ${process.env.OPENAI_API_KEY ? '✅ Configured' : '❌ Not configured'}`);
+  console.log(`🔑 OpenAI API Key: Dynamic (from database settings)`);
 });

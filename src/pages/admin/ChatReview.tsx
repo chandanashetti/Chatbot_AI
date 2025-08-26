@@ -909,8 +909,8 @@ const ChatReview = () => {
             const chatCount = platform.id === 'all' 
               ? chatSessions.length 
               : chatSessions.filter(chat => chat.platform === platform.id).length;
-            
-            return (
+
+  return (
               <button
                 key={platform.id}
                 onClick={() => setSelectedPlatform(platform.id)}
