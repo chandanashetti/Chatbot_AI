@@ -32,7 +32,7 @@ const NAVIGATION_CONFIG = [
   { name: 'Integrations', href: '/admin/integrations', icon: MessageSquare, roles: ['admin', 'superadmin'] },
   { name: 'Agent Management', href: '/admin/agents', icon: Headphones, roles: ['admin', 'superadmin'] },
   { name: 'Chat Review', href: '/admin/chats', icon: History, roles: ['admin', 'superadmin', 'manager'] },
-  { name: 'Ticket Management', href: '/admin/tickets', icon: Ticket, roles: ['admin', 'superadmin', 'manager'] },
+  { name: 'Customer Management', href: '/admin/tickets', icon: Ticket, roles: ['admin', 'superadmin', 'manager'] },
   { name: 'User Management', href: '/admin/users', icon: User, roles: ['admin', 'superadmin'] },
   { name: 'Analytics', href: '/admin/analytics', icon: BarChart3, roles: ['admin', 'superadmin', 'manager'] },
   { name: 'Knowledge Base', href: '/admin/knowledge-base', icon: FileText, roles: ['admin', 'superadmin', 'manager'] },
