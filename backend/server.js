@@ -1388,6 +1388,26 @@ app.get('/api/settings/models', (req, res) => {
   });
 });
 
+// Bot Management Routes
+const botRoutes = require('./routes/bots');
+const widgetRoutes = require('./routes/widget');
+const deploymentRoutes = require('./routes/deployment');
+
+// Middleware for authentication (placeholder - implement proper auth)
+const authenticateUser = (req, res, next) => {
+  // For development, use a default user
+  req.user = { id: '1', role: 'admin' };
+  next();
+};
+
+// Apply routes
+app.use('/api/bots', authenticateUser, botRoutes);
+app.use('/api/widget', widgetRoutes);
+app.use('/api/deployment', authenticateUser, deploymentRoutes);
+
+// Serve widget static files
+app.use('/widget.js', express.static(path.join(__dirname, 'public/widget.js')));
+
 // Error handling middleware
 app.use((error, req, res, next) => {
   console.error('Server error:', error);
@@ -1607,15 +1627,21 @@ app.post('/api/web-scraping/search', async (req, res) => {
 // Start server
 server.listen(PORT, () => {
   console.log(`🚀 Backend server running on port ${PORT}`);
-  console.log(`📚 Knowledge Base API: http://localhost:${PORT}/api/knowledge-base`);
-  console.log(`🤖 RAG API: http://localhost:${PORT}/api/rag`);
-  console.log(`🧠 OpenAI API: http://localhost:${PORT}/api/openai`);
-  console.log(`💬 Chat API: http://localhost:${PORT}/api/chat`);
-  console.log(`🌐 Web Scraping API: http://localhost:${PORT}/api/web-scraping`);
-  console.log(`⚙️ Settings API: http://localhost:${PORT}/api/settings`);
-  console.log(`🔍 Health Check: http://localhost:${PORT}/api/health`);
-  console.log(`🔌 WebSocket: http://localhost:${PORT} (Socket.IO)`);
+  console.log(`\n📋 API Endpoints:`);
+  console.log(`  🤖 Bot Management: http://localhost:${PORT}/api/bots`);
+  console.log(`  💬 Widget API: http://localhost:${PORT}/api/widget`);
+  console.log(`  🚀 Deployment: http://localhost:${PORT}/api/deployment`);
+  console.log(`  📚 Knowledge Base: http://localhost:${PORT}/api/knowledge-base`);
+  console.log(`  🧠 RAG API: http://localhost:${PORT}/api/rag`);
+  console.log(`  🤖 OpenAI API: http://localhost:${PORT}/api/openai`);
+  console.log(`  💬 Chat API: http://localhost:${PORT}/api/chat`);
+  console.log(`  🌐 Web Scraping: http://localhost:${PORT}/api/web-scraping`);
+  console.log(`  ⚙️ Settings: http://localhost:${PORT}/api/settings`);
+  console.log(`  🔍 Health Check: http://localhost:${PORT}/api/health`);
+  console.log(`\n🔌 WebSocket: http://localhost:${PORT} (Socket.IO)`);
+  console.log(`📱 Widget Script: http://localhost:${PORT}/widget.js`);
   console.log(`\n📊 Database: ${database.isConnected ? '✅ MongoDB Connected' : '❌ MongoDB Disconnected'}`);
   console.log(`⚡ Make sure Ollama is running on http://localhost:11434`);
   console.log(`🔑 OpenAI API Key: Dynamic (from database settings)`);
+  console.log(`\n🎯 Bot Platform Ready! Create bots via frontend and deploy with embed codes.`);
 });
