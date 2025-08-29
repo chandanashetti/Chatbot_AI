@@ -74,15 +74,34 @@ const botSettingsSchema = new mongoose.Schema({
     avatar: String,
     name: String,
     welcomeMessage: { type: String, default: 'Hello! How can I help you today?' },
+    description: String,
     theme: {
       primaryColor: { type: String, default: '#3B82F6' },
+      secondaryColor: { type: String, default: '#EFF6FF' },
       backgroundColor: { type: String, default: '#FFFFFF' },
-      textColor: { type: String, default: '#1F2937' },
-      borderRadius: { type: String, default: '12px' },
-      fontFamily: { type: String, default: 'Inter, sans-serif' }
+      textColor: { type: String, default: '#374151' }
     },
-    position: { type: String, enum: ['bottom-right', 'bottom-left', 'top-right', 'top-left'], default: 'bottom-right' },
-    size: { type: String, enum: ['small', 'medium', 'large'], default: 'medium' }
+    typography: {
+      fontFamily: { type: String, default: 'system-ui' },
+      fontSize: { type: Number, default: 14 },
+      lineHeight: { type: Number, default: 1.5 }
+    },
+    position: {
+      side: { type: String, enum: ['left', 'right'], default: 'right' },
+      offset: {
+        x: { type: Number, default: 20 },
+        y: { type: Number, default: 20 }
+      }
+    },
+    messageStyle: {
+      bubbleStyle: { type: String, enum: ['rounded', 'square', 'minimal'], default: 'rounded' },
+      showAvatar: { type: Boolean, default: true },
+      showTimestamp: { type: Boolean, default: false }
+    },
+    background: {
+      type: { type: String, enum: ['none', 'color', 'gradient', 'image'], default: 'none' },
+      value: { type: String, default: '' }
+    }
   },
   integrations: {
     platforms: { type: [String], default: ['website'] },

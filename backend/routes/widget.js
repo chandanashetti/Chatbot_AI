@@ -65,12 +65,17 @@ router.get('/:widgetId/config', verifyWidgetAccess, async (req, res) => {
     
     const config = {
       widgetId: bot.deployment.widgetId,
-      botName: bot.settings.appearance.name || bot.name,
-      welcomeMessage: bot.settings.appearance.welcomeMessage,
-      theme: bot.settings.appearance.theme,
-      position: bot.settings.appearance.position,
-      size: bot.settings.appearance.size,
-      avatar: bot.settings.appearance.avatar,
+      appearance: {
+        name: bot.settings.appearance.name || bot.name,
+        welcomeMessage: bot.settings.appearance.welcomeMessage,
+        description: bot.settings.appearance.description,
+        avatar: bot.settings.appearance.avatar,
+        theme: bot.settings.appearance.theme,
+        typography: bot.settings.appearance.typography,
+        position: bot.settings.appearance.position,
+        messageStyle: bot.settings.appearance.messageStyle,
+        background: bot.settings.appearance.background
+      },
       behavior: {
         typingIndicator: bot.settings.behavior.typingIndicator,
         responseDelay: bot.settings.behavior.responseDelay
