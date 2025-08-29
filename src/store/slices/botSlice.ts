@@ -49,6 +49,10 @@ export interface BotNode {
       method: 'GET' | 'POST'
       headers?: Record<string, string>
     }
+    actionType?: string
+    variableName?: string
+    variableValue?: string
+    reason?: string
   }
 }
 
@@ -56,7 +60,10 @@ export interface BotConnection {
   id: string
   source: string
   target: string
+  sourceHandle?: string
+  targetHandle?: string
   condition?: string
+  label?: string
 }
 
 export interface BotSettings {

@@ -242,7 +242,7 @@ export const botsAPI = {
   
   updateBotSettings: (id: string, settings: any) => api.put(`/bots/${id}/settings`, settings),
   
-  testBot: (id: string, message: string) => api.post(`/bots/${id}/test`, { message }),
+  testBot: (id: string, message: string, sessionId?: string) => api.post(`/bots/${id}/test`, { message, sessionId }),
   
   getBotAnalytics: (id: string, params?: {
     startDate?: string
