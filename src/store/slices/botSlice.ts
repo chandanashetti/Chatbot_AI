@@ -33,7 +33,20 @@ export interface BotFlow {
 
 export interface BotNode {
   id: string
-  type: 'message' | 'question' | 'condition' | 'action' | 'webhook' | 'handoff'
+  type: 'message' | 'question' | 'condition' | 'action' | 'webhook' | 'handoff' |
+        'quick_replies' | 'input' | 'random' | 'switch' | 'loop' | 'delay' | 'jump' |
+        'variable' | 'calculation' | 'validation' | 'script' | 'ai_response' |
+        'intent_recognition' | 'entity_extraction' | 'sentiment_analysis' |
+        'language_detection' | 'translation' | 'image' | 'video' | 'audio' |
+        'voice_input' | 'file_upload' | 'document' | 'carousel' | 'gallery' |
+        'email_input' | 'phone_input' | 'date_input' | 'time_input' | 'number_input' |
+        'rating' | 'survey' | 'location' | 'qr_code' | 'product_catalog' |
+        'add_to_cart' | 'checkout' | 'order_tracking' | 'inventory_check' |
+        'discount_code' | 'price_calculator' | 'subscription' | 'crm_integration' |
+        'email_send' | 'sms_send' | 'calendar_booking' | 'google_sheets' |
+        'slack_notification' | 'zapier' | 'analytics_event' | 'conversion_tracking' |
+        'user_feedback' | 'nps_survey' | 'ab_test' | 'goal_tracking' | 'live_chat' |
+        'authentication' | 'session_management' | 'escalation' | 'fallback' | 'global_menu'
   position: { x: number; y: number }
   data: {
     title: string
@@ -53,6 +66,95 @@ export interface BotNode {
     variableName?: string
     variableValue?: string
     reason?: string
+    // Quick Replies
+    buttons?: Array<{
+      title: string
+      payload?: string
+      type?: 'text' | 'url' | 'phone'
+    }>
+    // Media content
+    mediaUrl?: string
+    mediaType?: 'image' | 'video' | 'audio' | 'document'
+    // Input validation
+    validation?: {
+      type: 'email' | 'phone' | 'number' | 'date' | 'url' | 'regex'
+      pattern?: string
+      message?: string
+    }
+    // AI settings
+    aiModel?: string
+    aiPrompt?: string
+    temperature?: number
+    // Form fields
+    fields?: Array<{
+      name: string
+      type: string
+      label: string
+      required?: boolean
+      options?: string[]
+    }>
+    // E-commerce
+    productId?: string
+    price?: number
+    currency?: string
+    quantity?: number
+    // Integration settings
+    integration?: {
+      type: string
+      config: Record<string, any>
+    }
+    // Analytics
+    eventName?: string
+    eventProperties?: Record<string, any>
+    goalId?: string
+    // Advanced features
+    delayDuration?: number
+    loopCount?: number
+    fallbackMessage?: string
+    authRequired?: boolean
+    sessionTimeout?: number
+    // Multimedia
+    gallery?: Array<{
+      url: string
+      title?: string
+      description?: string
+    }>
+    carousel?: Array<{
+      title: string
+      subtitle?: string
+      imageUrl?: string
+      buttons?: Array<{
+        title: string
+        type: 'url' | 'payload'
+        value: string
+      }>
+    }>
+    // Location
+    coordinates?: {
+      latitude: number
+      longitude: number
+    }
+    radius?: number
+    // QR Code
+    qrData?: string
+    qrSize?: number
+    // Rating
+    ratingScale?: number
+    ratingLabels?: string[]
+    // Survey
+    surveyQuestions?: Array<{
+      question: string
+      type: 'text' | 'choice' | 'rating' | 'date'
+      options?: string[]
+    }>
+    // Calendar
+    calendarId?: string
+    timeSlots?: string[]
+    duration?: number
+    // Translations
+    translations?: Record<string, string>
+    // Custom properties for extensibility
+    customProperties?: Record<string, any>
   }
 }
 
@@ -78,15 +180,47 @@ export interface BotSettings {
     fallbackMessage: string
     maxRetries: number
     handoffTriggers: string[]
+    enableVoice?: boolean
+    enableFileUpload?: boolean
+    enableLocation?: boolean
+    enablePayments?: boolean
+    enableAnalytics?: boolean
+    sessionTimeout?: number
+    multiLanguage?: boolean
+    supportedLanguages?: string[]
+    aiEnabled?: boolean
+    smartReplies?: boolean
+    autoTranslation?: boolean
   }
-  appearance: {
-    avatar: string
-    name: string
-    welcomeMessage: string
-    theme: {
-      primaryColor: string
-      backgroundColor: string
-      textColor: string
+  appearance?: {
+    avatar?: string
+    name?: string
+    welcomeMessage?: string
+    description?: string
+    theme?: {
+      primaryColor?: string
+      secondaryColor?: string
+      accentColor?: string
+      backgroundColor?: string
+      textColor?: string
+    }
+    typography?: {
+      fontFamily?: string
+      fontSize?: number
+      lineHeight?: number
+    }
+    position?: {
+      side?: 'left' | 'right'
+      offset?: { x: number; y: number }
+    }
+    messageStyle?: {
+      bubbleStyle?: 'rounded' | 'square' | 'minimal'
+      showAvatar?: boolean
+      showTimestamp?: boolean
+    }
+    background?: {
+      type?: 'none' | 'color' | 'gradient' | 'image'
+      value?: string
     }
   }
   integrations: {
@@ -274,13 +408,24 @@ const mockBots: Bot[] = [
         style: 'conversational',
         language: 'en'
       },
-      behavior: {
-        responseDelay: 1000,
-        typingIndicator: true,
-        fallbackMessage: 'I didn\'t understand that. Can you rephrase?',
-        maxRetries: 3,
-        handoffTriggers: ['human', 'agent', 'speak to someone']
-      },
+              behavior: {
+          responseDelay: 1000,
+          typingIndicator: true,
+          fallbackMessage: 'I didn\'t understand that. Can you rephrase?',
+          maxRetries: 3,
+          handoffTriggers: ['human', 'agent', 'speak to someone'],
+          enableVoice: false,
+          enableFileUpload: false,
+          enableLocation: false,
+          enablePayments: false,
+          enableAnalytics: true,
+          sessionTimeout: 1800000,
+          multiLanguage: false,
+          supportedLanguages: ['en'],
+          aiEnabled: true,
+          smartReplies: false,
+          autoTranslation: false
+        },
       appearance: {
         avatar: '/avatars/welleazy.png',
         name: 'Welleazy Assistant',

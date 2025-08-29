@@ -13,6 +13,7 @@ import TicketManagement from './pages/admin/TicketManagement'
 import UserManagement from './pages/admin/UserManagement'
 import BotManagement from './pages/admin/BotManagement'
 import BotBuilder from './pages/admin/BotBuilder'
+import BotSettings from './pages/admin/BotSettings'
 import KnowledgeBase from './pages/admin/KnowledgeBase'
 import Logs from './pages/admin/Logs'
 import Analytics from './pages/admin/Analytics'
@@ -45,6 +46,7 @@ function App() {
             <Route path="users" element={<UserManagement />} />
             <Route path="bots" element={<BotManagement />} />
             <Route path="bots/:botId/builder" element={<BotBuilder />} />
+            <Route path="bots/:botId/settings" element={<BotSettings />} />
             <Route path="knowledge-base" element={<KnowledgeBase />} />
             <Route path="logs" element={<Logs />} />
             <Route path="analytics" element={<Analytics />} />

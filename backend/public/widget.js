@@ -9,7 +9,37 @@
     position: 'bottom-right',
     sessionId: null,
     isOpen: false,
-    isMinimized: true
+    isMinimized: true,
+    appearance: {
+      name: 'AI Assistant',
+      welcomeMessage: 'Hello! How can I help you today?',
+      description: 'AI Assistant',
+      avatar: null,
+      theme: {
+        primaryColor: '#3B82F6',
+        secondaryColor: '#EFF6FF',
+        backgroundColor: '#FFFFFF',
+        textColor: '#374151'
+      },
+      typography: {
+        fontFamily: 'system-ui',
+        fontSize: 14,
+        lineHeight: 1.5
+      },
+      position: {
+        side: 'right',
+        offset: { x: 20, y: 20 }
+      },
+      messageStyle: {
+        bubbleStyle: 'rounded',
+        showAvatar: true,
+        showTimestamp: false
+      },
+      background: {
+        type: 'none',
+        value: ''
+      }
+    }
   };
 
   // Initialize widget
@@ -33,6 +63,19 @@
     config.botId = widgetScript.getAttribute('data-bot-id');
     config.apiUrl = widgetScript.getAttribute('data-api-url');
     config.theme = widgetScript.getAttribute('data-theme') || 'default';
+    
+    // Load custom configuration if provided
+    const customConfig = widgetScript.getAttribute('data-config');
+    if (customConfig) {
+      try {
+        const parsed = JSON.parse(customConfig.replace(/&quot;/g, '"'));
+        if (parsed.appearance) {
+          config.appearance = { ...config.appearance, ...parsed.appearance };
+        }
+      } catch (error) {
+        console.warn('ChatBot: Invalid custom configuration', error);
+      }
+    }
 
     if (!config.botId || !config.apiUrl) {
       console.error('ChatBot: Missing required configuration');
@@ -99,21 +142,38 @@
     // Create widget container
     const widgetContainer = document.createElement('div');
     widgetContainer.id = 'chatbot-widget-container';
+    
+    // Apply custom positioning
+    const position = config.appearance.position;
+    const positionStyles = position.side === 'left' 
+      ? `left: ${position.offset.x}px;` 
+      : `right: ${position.offset.x}px;`;
+    
+    // Apply custom background if set
+    let backgroundStyles = '';
+    if (config.appearance.background.type === 'color') {
+      backgroundStyles = `background-color: ${config.appearance.background.value};`;
+    } else if (config.appearance.background.type === 'gradient') {
+      backgroundStyles = `background: ${config.appearance.background.value};`;
+    } else if (config.appearance.background.type === 'image') {
+      backgroundStyles = `background-image: url('${config.appearance.background.value}'); background-size: cover; background-position: center;`;
+    }
+    
     widgetContainer.innerHTML = `
       <style>
         #chatbot-widget-container {
           position: fixed;
-          ${config.position.includes('bottom') ? 'bottom: 20px;' : 'top: 20px;'}
-          ${config.position.includes('right') ? 'right: 20px;' : 'left: 20px;'}
+          bottom: ${position.offset.y}px;
+          ${positionStyles}
           z-index: 10000;
-          font-family: ${config.theme?.fontFamily || 'Arial, sans-serif'};
+          font-family: ${config.appearance.typography.fontFamily};
         }
 
         #chatbot-toggle {
           width: 60px;
           height: 60px;
           border-radius: 30px;
-          background: ${config.theme?.primaryColor || '#007bff'};
+          background: ${config.appearance.theme.primaryColor};
           border: none;
           cursor: pointer;
           box-shadow: 0 4px 12px rgba(0,0,0,0.15);
@@ -138,12 +198,15 @@
           display: none;
           width: 350px;
           height: 500px;
-          background: white;
-          border-radius: ${config.theme?.borderRadius || '12px'};
+          background: ${config.appearance.theme.backgroundColor};
+          border-radius: ${config.appearance.messageStyle.bubbleStyle === 'square' ? '4px' : config.appearance.messageStyle.bubbleStyle === 'minimal' ? '8px' : '12px'};
           box-shadow: 0 8px 32px rgba(0,0,0,0.15);
           margin-bottom: 10px;
           overflow: hidden;
           flex-direction: column;
+          font-family: ${config.appearance.typography.fontFamily};
+          font-size: ${config.appearance.typography.fontSize}px;
+          line-height: ${config.appearance.typography.lineHeight};
         }
 
         #chatbot-window.open {
@@ -151,7 +214,7 @@
         }
 
         #chatbot-header {
-          background: ${config.theme?.primaryColor || '#007bff'};
+          background: ${config.appearance.theme.primaryColor};
           color: white;
           padding: 15px;
           display: flex;
@@ -162,6 +225,12 @@
         #chatbot-title {
           font-weight: bold;
           font-size: 16px;
+        }
+
+        #chatbot-subtitle {
+          font-size: 12px;
+          opacity: 0.9;
+          margin-top: 2px;
         }
 
         #chatbot-close {
@@ -176,7 +245,8 @@
           flex: 1;
           overflow-y: auto;
           padding: 15px;
-          background: #f8f9fa;
+          background: ${config.appearance.theme.secondaryColor || '#f8f9fa'};
+          ${backgroundStyles}
         }
 
         .chatbot-message {
@@ -230,13 +300,13 @@
         }
 
         #chatbot-send {
-          background: ${config.theme?.primaryColor || '#007bff'};
+          background: ${config.appearance.theme.primaryColor};
           color: white;
           border: none;
           border-radius: 20px;
           padding: 10px 15px;
           cursor: pointer;
-          font-size: 14px;
+          font-size: ${config.appearance.typography.fontSize}px;
         }
 
         #chatbot-typing {
@@ -257,16 +327,16 @@
           padding: 8px 12px;
           margin: 5px 0;
           background: white;
-          border: 1px solid ${config.theme?.primaryColor || '#007bff'};
-          color: ${config.theme?.primaryColor || '#007bff'};
-          border-radius: 15px;
+          border: 1px solid ${config.appearance.theme.primaryColor};
+          color: ${config.appearance.theme.primaryColor};
+          border-radius: ${config.appearance.messageStyle.bubbleStyle === 'square' ? '4px' : '15px'};
           cursor: pointer;
-          font-size: 13px;
+          font-size: ${config.appearance.typography.fontSize - 1}px;
           text-align: left;
         }
 
         .chatbot-option:hover {
-          background: ${config.theme?.primaryColor || '#007bff'};
+          background: ${config.appearance.theme.primaryColor};
           color: white;
         }
 
@@ -286,7 +356,13 @@
 
       <div id="chatbot-window">
         <div id="chatbot-header">
-          <div id="chatbot-title">${config.botName || 'Chat Assistant'}</div>
+          <div style="display: flex; align-items: center;">
+            ${config.appearance.avatar ? `<img src="${config.appearance.avatar}" alt="Bot Avatar" style="width: 32px; height: 32px; border-radius: 50%; margin-right: 10px;">` : ''}
+            <div>
+              <div id="chatbot-title">${config.appearance.name}</div>
+              ${config.appearance.description ? `<div id="chatbot-subtitle">${config.appearance.description}</div>` : ''}
+            </div>
+          </div>
           <button id="chatbot-close">&times;</button>
         </div>
         <div id="chatbot-messages"></div>
@@ -307,8 +383,8 @@
     document.body.appendChild(widgetContainer);
 
     // Add welcome message if configured
-    if (config.welcomeMessage) {
-      addMessage('bot', config.welcomeMessage);
+    if (config.appearance.welcomeMessage) {
+      addMessage('bot', config.appearance.welcomeMessage);
     }
   }
 

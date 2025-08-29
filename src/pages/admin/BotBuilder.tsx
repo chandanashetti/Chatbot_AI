@@ -28,7 +28,56 @@ import {
   RotateCcw,
   Maximize,
   Minimize,
-  X
+  X,
+  Clock,
+  Calendar,
+  Mail,
+  Phone,
+  ShoppingCart,
+  CreditCard,
+  Database,
+  FileText,
+  Image,
+  Video,
+  Mic,
+  MapPin,
+  Star,
+  ThumbsUp,
+  Bell,
+  Settings,
+  Calculator,
+  Search,
+  Upload,
+  QrCode,
+  Smartphone,
+  Globe,
+  Brain,
+  Target,
+  TrendingUp,
+  BarChart3,
+  Shuffle,
+  RotateCw,
+  FastForward,
+  Volume2,
+  Heart,
+  MessageCircle,
+  Send,
+  Lock,
+  Shield,
+  Store,
+  Package,
+  Truck,
+  DollarSign,
+  Percent,
+  Award,
+  Layers,
+  Code,
+  RefreshCw,
+  Edit,
+  Languages,
+  Hash,
+  ClipboardList,
+  Menu
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 
@@ -61,50 +110,530 @@ const BotBuilder = () => {
     }
   }, [bot, navigate])
 
-  const nodeTypes = [
-    {
-      type: 'message',
-      name: 'Message',
-      icon: MessageSquare,
-      color: 'bg-blue-100 text-blue-600 border-blue-200',
-      description: 'Send a message to the user'
+  const nodeCategories = {
+    basic: {
+      name: 'Basic Nodes',
+      nodes: [
+        {
+          type: 'message',
+          name: 'Message',
+          icon: MessageSquare,
+          color: 'bg-blue-100 text-blue-600 border-blue-200',
+          description: 'Send a text message to the user'
+        },
+        {
+          type: 'question',
+          name: 'Question',
+          icon: HelpCircle,
+          color: 'bg-green-100 text-green-600 border-green-200',
+          description: 'Ask the user a question'
+        },
+        {
+          type: 'quick_replies',
+          name: 'Quick Replies',
+          icon: MessageCircle,
+          color: 'bg-indigo-100 text-indigo-600 border-indigo-200',
+          description: 'Show quick reply buttons'
+        },
+        {
+          type: 'input',
+          name: 'User Input',
+          icon: Edit,
+          color: 'bg-cyan-100 text-cyan-600 border-cyan-200',
+          description: 'Collect text input from user'
+        }
+      ]
     },
-    {
-      type: 'question',
-      name: 'Question',
-      icon: HelpCircle,
-      color: 'bg-green-100 text-green-600 border-green-200',
-      description: 'Ask the user a question'
+    logic: {
+      name: 'Logic & Flow Control',
+      nodes: [
+        {
+          type: 'condition',
+          name: 'Condition',
+          icon: GitBranch,
+          color: 'bg-yellow-100 text-yellow-600 border-yellow-200',
+          description: 'Branch based on conditions'
+        },
+        {
+          type: 'random',
+          name: 'Random',
+          icon: Shuffle,
+          color: 'bg-pink-100 text-pink-600 border-pink-200',
+          description: 'Randomly choose a path'
+        },
+        {
+          type: 'switch',
+          name: 'Switch',
+          icon: RotateCw,
+          color: 'bg-amber-100 text-amber-600 border-amber-200',
+          description: 'Multiple condition branches'
+        },
+        {
+          type: 'loop',
+          name: 'Loop',
+          icon: RefreshCw,
+          color: 'bg-lime-100 text-lime-600 border-lime-200',
+          description: 'Repeat conversation flow'
+        },
+        {
+          type: 'delay',
+          name: 'Delay',
+          icon: Clock,
+          color: 'bg-slate-100 text-slate-600 border-slate-200',
+          description: 'Add time delay'
+        },
+        {
+          type: 'jump',
+          name: 'Jump',
+          icon: FastForward,
+          color: 'bg-violet-100 text-violet-600 border-violet-200',
+          description: 'Jump to another node'
+        }
+      ]
     },
-    {
-      type: 'condition',
-      name: 'Condition',
-      icon: GitBranch,
-      color: 'bg-yellow-100 text-yellow-600 border-yellow-200',
-      description: 'Branch based on conditions'
+    actions: {
+      name: 'Actions & Processing',
+      nodes: [
+        {
+          type: 'action',
+          name: 'Action',
+          icon: Zap,
+          color: 'bg-purple-100 text-purple-600 border-purple-200',
+          description: 'Perform custom action'
+        },
+        {
+          type: 'variable',
+          name: 'Set Variable',
+          icon: Database,
+          color: 'bg-emerald-100 text-emerald-600 border-emerald-200',
+          description: 'Set or update variables'
+        },
+        {
+          type: 'calculation',
+          name: 'Calculate',
+          icon: Calculator,
+          color: 'bg-orange-100 text-orange-600 border-orange-200',
+          description: 'Perform mathematical calculations'
+        },
+        {
+          type: 'validation',
+          name: 'Validate',
+          icon: Shield,
+          color: 'bg-red-100 text-red-600 border-red-200',
+          description: 'Validate user input'
+        },
+        {
+          type: 'script',
+          name: 'Custom Script',
+          icon: Code,
+          color: 'bg-gray-100 text-gray-600 border-gray-200',
+          description: 'Execute custom JavaScript'
+        }
+      ]
     },
-    {
-      type: 'action',
-      name: 'Action',
-      icon: Zap,
-      color: 'bg-purple-100 text-purple-600 border-purple-200',
-      description: 'Perform an action'
+    ai: {
+      name: 'AI & Intelligence',
+      nodes: [
+        {
+          type: 'ai_response',
+          name: 'AI Response',
+          icon: Brain,
+          color: 'bg-purple-100 text-purple-600 border-purple-200',
+          description: 'Generate AI-powered response'
+        },
+        {
+          type: 'intent_recognition',
+          name: 'Intent Recognition',
+          icon: Target,
+          color: 'bg-indigo-100 text-indigo-600 border-indigo-200',
+          description: 'Detect user intent'
+        },
+        {
+          type: 'entity_extraction',
+          name: 'Entity Extraction',
+          icon: Search,
+          color: 'bg-teal-100 text-teal-600 border-teal-200',
+          description: 'Extract entities from text'
+        },
+        {
+          type: 'sentiment_analysis',
+          name: 'Sentiment Analysis',
+          icon: Heart,
+          color: 'bg-rose-100 text-rose-600 border-rose-200',
+          description: 'Analyze message sentiment'
+        },
+        {
+          type: 'language_detection',
+          name: 'Language Detection',
+          icon: Globe,
+          color: 'bg-blue-100 text-blue-600 border-blue-200',
+          description: 'Detect user language'
+        },
+        {
+          type: 'translation',
+          name: 'Translation',
+          icon: Languages,
+          color: 'bg-green-100 text-green-600 border-green-200',
+          description: 'Translate messages'
+        }
+      ]
     },
-    {
-      type: 'webhook',
-      name: 'Webhook',
-      icon: Webhook,
-      color: 'bg-orange-100 text-orange-600 border-orange-200',
-      description: 'Call external API'
+    media: {
+      name: 'Media & Rich Content',
+      nodes: [
+        {
+          type: 'image',
+          name: 'Image',
+          icon: Image,
+          color: 'bg-cyan-100 text-cyan-600 border-cyan-200',
+          description: 'Send image to user'
+        },
+        {
+          type: 'video',
+          name: 'Video',
+          icon: Video,
+          color: 'bg-red-100 text-red-600 border-red-200',
+          description: 'Send video content'
+        },
+        {
+          type: 'audio',
+          name: 'Audio',
+          icon: Volume2,
+          color: 'bg-orange-100 text-orange-600 border-orange-200',
+          description: 'Send audio message'
+        },
+        {
+          type: 'voice_input',
+          name: 'Voice Input',
+          icon: Mic,
+          color: 'bg-purple-100 text-purple-600 border-purple-200',
+          description: 'Record voice from user'
+        },
+        {
+          type: 'file_upload',
+          name: 'File Upload',
+          icon: Upload,
+          color: 'bg-indigo-100 text-indigo-600 border-indigo-200',
+          description: 'Allow file uploads'
+        },
+        {
+          type: 'document',
+          name: 'Document',
+          icon: FileText,
+          color: 'bg-slate-100 text-slate-600 border-slate-200',
+          description: 'Send document files'
+        },
+        {
+          type: 'carousel',
+          name: 'Carousel',
+          icon: Layers,
+          color: 'bg-pink-100 text-pink-600 border-pink-200',
+          description: 'Multi-item carousel'
+        },
+        {
+          type: 'gallery',
+          name: 'Gallery',
+          icon: Grid,
+          color: 'bg-emerald-100 text-emerald-600 border-emerald-200',
+          description: 'Image gallery'
+        }
+      ]
     },
-    {
-      type: 'handoff',
-      name: 'Handoff',
-      icon: Users,
-      color: 'bg-red-100 text-red-600 border-red-200',
-      description: 'Transfer to human agent'
+    forms: {
+      name: 'Forms & Data Collection',
+      nodes: [
+        {
+          type: 'email_input',
+          name: 'Email Input',
+          icon: Mail,
+          color: 'bg-blue-100 text-blue-600 border-blue-200',
+          description: 'Collect email address'
+        },
+        {
+          type: 'phone_input',
+          name: 'Phone Input',
+          icon: Phone,
+          color: 'bg-green-100 text-green-600 border-green-200',
+          description: 'Collect phone number'
+        },
+        {
+          type: 'date_input',
+          name: 'Date Input',
+          icon: Calendar,
+          color: 'bg-purple-100 text-purple-600 border-purple-200',
+          description: 'Date picker input'
+        },
+        {
+          type: 'time_input',
+          name: 'Time Input',
+          icon: Clock,
+          color: 'bg-orange-100 text-orange-600 border-orange-200',
+          description: 'Time picker input'
+        },
+        {
+          type: 'number_input',
+          name: 'Number Input',
+          icon: Hash,
+          color: 'bg-cyan-100 text-cyan-600 border-cyan-200',
+          description: 'Numeric input field'
+        },
+        {
+          type: 'rating',
+          name: 'Rating',
+          icon: Star,
+          color: 'bg-yellow-100 text-yellow-600 border-yellow-200',
+          description: 'Star rating input'
+        },
+        {
+          type: 'survey',
+          name: 'Survey',
+          icon: ClipboardList,
+          color: 'bg-indigo-100 text-indigo-600 border-indigo-200',
+          description: 'Multi-question survey'
+        },
+        {
+          type: 'location',
+          name: 'Location',
+          icon: MapPin,
+          color: 'bg-red-100 text-red-600 border-red-200',
+          description: 'Get user location'
+        },
+        {
+          type: 'qr_code',
+          name: 'QR Code',
+          icon: QrCode,
+          color: 'bg-slate-100 text-slate-600 border-slate-200',
+          description: 'Generate or scan QR code'
+        }
+      ]
+    },
+    ecommerce: {
+      name: 'E-commerce & Payments',
+      nodes: [
+        {
+          type: 'product_catalog',
+          name: 'Product Catalog',
+          icon: Store,
+          color: 'bg-emerald-100 text-emerald-600 border-emerald-200',
+          description: 'Show product catalog'
+        },
+        {
+          type: 'add_to_cart',
+          name: 'Add to Cart',
+          icon: ShoppingCart,
+          color: 'bg-blue-100 text-blue-600 border-blue-200',
+          description: 'Add item to shopping cart'
+        },
+        {
+          type: 'checkout',
+          name: 'Checkout',
+          icon: CreditCard,
+          color: 'bg-green-100 text-green-600 border-green-200',
+          description: 'Process payment'
+        },
+        {
+          type: 'order_tracking',
+          name: 'Order Tracking',
+          icon: Truck,
+          color: 'bg-orange-100 text-orange-600 border-orange-200',
+          description: 'Track order status'
+        },
+        {
+          type: 'inventory_check',
+          name: 'Inventory Check',
+          icon: Package,
+          color: 'bg-purple-100 text-purple-600 border-purple-200',
+          description: 'Check product availability'
+        },
+        {
+          type: 'discount_code',
+          name: 'Discount Code',
+          icon: Percent,
+          color: 'bg-red-100 text-red-600 border-red-200',
+          description: 'Apply discount codes'
+        },
+        {
+          type: 'price_calculator',
+          name: 'Price Calculator',
+          icon: DollarSign,
+          color: 'bg-yellow-100 text-yellow-600 border-yellow-200',
+          description: 'Calculate pricing'
+        },
+        {
+          type: 'subscription',
+          name: 'Subscription',
+          icon: RefreshCw,
+          color: 'bg-indigo-100 text-indigo-600 border-indigo-200',
+          description: 'Manage subscriptions'
+        }
+      ]
+    },
+    integrations: {
+      name: 'Integrations & External',
+      nodes: [
+        {
+          type: 'webhook',
+          name: 'Webhook',
+          icon: Webhook,
+          color: 'bg-orange-100 text-orange-600 border-orange-200',
+          description: 'Call external API'
+        },
+        {
+          type: 'crm_integration',
+          name: 'CRM Integration',
+          icon: Database,
+          color: 'bg-blue-100 text-blue-600 border-blue-200',
+          description: 'Sync with CRM system'
+        },
+        {
+          type: 'email_send',
+          name: 'Send Email',
+          icon: Send,
+          color: 'bg-green-100 text-green-600 border-green-200',
+          description: 'Send email message'
+        },
+        {
+          type: 'sms_send',
+          name: 'Send SMS',
+          icon: Smartphone,
+          color: 'bg-purple-100 text-purple-600 border-purple-200',
+          description: 'Send SMS message'
+        },
+        {
+          type: 'calendar_booking',
+          name: 'Calendar Booking',
+          icon: Calendar,
+          color: 'bg-cyan-100 text-cyan-600 border-cyan-200',
+          description: 'Schedule appointments'
+        },
+        {
+          type: 'google_sheets',
+          name: 'Google Sheets',
+          icon: FileText,
+          color: 'bg-emerald-100 text-emerald-600 border-emerald-200',
+          description: 'Read/write Google Sheets'
+        },
+        {
+          type: 'slack_notification',
+          name: 'Slack Notification',
+          icon: Bell,
+          color: 'bg-pink-100 text-pink-600 border-pink-200',
+          description: 'Send Slack message'
+        },
+        {
+          type: 'zapier',
+          name: 'Zapier',
+          icon: Zap,
+          color: 'bg-orange-100 text-orange-600 border-orange-200',
+          description: 'Trigger Zapier automation'
+        }
+      ]
+    },
+    analytics: {
+      name: 'Analytics & Tracking',
+      nodes: [
+        {
+          type: 'analytics_event',
+          name: 'Analytics Event',
+          icon: BarChart3,
+          color: 'bg-blue-100 text-blue-600 border-blue-200',
+          description: 'Track custom events'
+        },
+        {
+          type: 'conversion_tracking',
+          name: 'Conversion Tracking',
+          icon: Target,
+          color: 'bg-green-100 text-green-600 border-green-200',
+          description: 'Track conversions'
+        },
+        {
+          type: 'user_feedback',
+          name: 'User Feedback',
+          icon: ThumbsUp,
+          color: 'bg-yellow-100 text-yellow-600 border-yellow-200',
+          description: 'Collect user feedback'
+        },
+        {
+          type: 'nps_survey',
+          name: 'NPS Survey',
+          icon: TrendingUp,
+          color: 'bg-purple-100 text-purple-600 border-purple-200',
+          description: 'Net Promoter Score survey'
+        },
+        {
+          type: 'ab_test',
+          name: 'A/B Test',
+          icon: Shuffle,
+          color: 'bg-indigo-100 text-indigo-600 border-indigo-200',
+          description: 'A/B test different paths'
+        },
+        {
+          type: 'goal_tracking',
+          name: 'Goal Tracking',
+          icon: Award,
+          color: 'bg-emerald-100 text-emerald-600 border-emerald-200',
+          description: 'Track goal completion'
+        }
+      ]
+    },
+    advanced: {
+      name: 'Advanced Features',
+      nodes: [
+        {
+          type: 'handoff',
+          name: 'Human Handoff',
+          icon: Users,
+          color: 'bg-red-100 text-red-600 border-red-200',
+          description: 'Transfer to human agent'
+        },
+        {
+          type: 'live_chat',
+          name: 'Live Chat',
+          icon: MessageSquare,
+          color: 'bg-blue-100 text-blue-600 border-blue-200',
+          description: 'Enable live chat mode'
+        },
+        {
+          type: 'authentication',
+          name: 'Authentication',
+          icon: Lock,
+          color: 'bg-gray-100 text-gray-600 border-gray-200',
+          description: 'User authentication'
+        },
+        {
+          type: 'session_management',
+          name: 'Session Management',
+          icon: Settings,
+          color: 'bg-slate-100 text-slate-600 border-slate-200',
+          description: 'Manage user sessions'
+        },
+        {
+          type: 'escalation',
+          name: 'Escalation',
+          icon: TrendingUp,
+          color: 'bg-yellow-100 text-yellow-600 border-yellow-200',
+          description: 'Escalate to supervisor'
+        },
+        {
+          type: 'fallback',
+          name: 'Fallback',
+          icon: RotateCcw,
+          color: 'bg-pink-100 text-pink-600 border-pink-200',
+          description: 'Handle unknown inputs'
+        },
+        {
+          type: 'global_menu',
+          name: 'Global Menu',
+          icon: Menu,
+          color: 'bg-indigo-100 text-indigo-600 border-indigo-200',
+          description: 'Persistent menu options'
+        }
+      ]
     }
-  ]
+  }
+
+  // Flatten all nodes for compatibility
+  const nodeTypes = Object.values(nodeCategories).flatMap(category => category.nodes)
 
   const handleNodeDrag = useCallback((e: React.DragEvent, nodeType: string) => {
     e.dataTransfer.setData('nodeType', nodeType)
@@ -548,24 +1077,33 @@ const BotBuilder = () => {
               </button>
             </div>
 
-            <div className="space-y-2">
-              {nodeTypes.map((nodeType) => {
-                const Icon = nodeType.icon
-                return (
-                  <div
-                    key={nodeType.type}
-                    draggable
-                    onDragStart={(e) => handleNodeDrag(e, nodeType.type)}
-                    className={`p-3 rounded-xl border-2 border-dashed cursor-move hover:shadow-md transition-all ${nodeType.color}`}
-                  >
-                    <div className="flex items-center space-x-2 mb-1">
-                      <Icon className="w-4 h-4" />
-                      <span className="font-medium text-sm">{nodeType.name}</span>
-                    </div>
-                    <p className="text-xs opacity-75">{nodeType.description}</p>
+            <div className="space-y-4">
+              {Object.entries(nodeCategories).map(([categoryKey, category]) => (
+                <div key={categoryKey} className="space-y-2">
+                  <h4 className="text-sm font-semibold text-slate-700 dark:text-slate-300 px-2 uppercase tracking-wider">
+                    {category.name}
+                  </h4>
+                  <div className="space-y-2">
+                    {category.nodes.map((nodeType) => {
+                      const Icon = nodeType.icon
+                      return (
+                        <div
+                          key={nodeType.type}
+                          draggable
+                          onDragStart={(e) => handleNodeDrag(e, nodeType.type)}
+                          className={`p-3 rounded-xl border-2 border-dashed cursor-move hover:shadow-md transition-all ${nodeType.color}`}
+                        >
+                          <div className="flex items-center space-x-2 mb-1">
+                            <Icon className="w-4 h-4" />
+                            <span className="font-medium text-sm">{nodeType.name}</span>
+                          </div>
+                          <p className="text-xs opacity-75">{nodeType.description}</p>
+                        </div>
+                      )
+                    })}
                   </div>
-                )
-              })}
+                </div>
+              ))}
             </div>
           </div>
         )}
@@ -923,6 +1461,322 @@ const BotBuilder = () => {
                 </div>
               )}
 
+              {/* Quick Replies Configuration */}
+              {selectedNodeData.type === 'quick_replies' && (
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+                    Quick Reply Buttons
+                  </label>
+                  <div className="space-y-2">
+                    {(selectedNodeData.data.buttons || []).map((button, index) => (
+                      <div key={index} className="flex space-x-2">
+                        <input
+                          type="text"
+                          placeholder="Button text"
+                          value={button.title || ''}
+                          onChange={(e) => {
+                            const newButtons = [...(selectedNodeData.data.buttons || [])]
+                            newButtons[index] = { ...button, title: e.target.value }
+                            handleNodeUpdate(selectedNodeData.id, {
+                              data: { ...selectedNodeData.data, buttons: newButtons }
+                            })
+                          }}
+                          className="input-field flex-1"
+                        />
+                        <button
+                          onClick={() => {
+                            const newButtons = (selectedNodeData.data.buttons || []).filter((_, i) => i !== index)
+                            handleNodeUpdate(selectedNodeData.id, {
+                              data: { ...selectedNodeData.data, buttons: newButtons }
+                            })
+                          }}
+                          className="text-red-500 hover:text-red-700"
+                        >
+                          ×
+                        </button>
+                      </div>
+                    ))}
+                    <button
+                      onClick={() => {
+                        const newButtons = [...(selectedNodeData.data.buttons || []), { title: '', payload: '' }]
+                        handleNodeUpdate(selectedNodeData.id, {
+                          data: { ...selectedNodeData.data, buttons: newButtons }
+                        })
+                      }}
+                      className="text-primary-600 text-sm hover:underline"
+                    >
+                      + Add Button
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Media Configuration */}
+              {(['image', 'video', 'audio', 'document'].includes(selectedNodeData.type)) && (
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+                    Media URL
+                  </label>
+                  <input
+                    type="url"
+                    value={selectedNodeData.data.mediaUrl || ''}
+                    onChange={(e) => handleNodeUpdate(selectedNodeData.id, {
+                      data: { ...selectedNodeData.data, mediaUrl: e.target.value }
+                    })}
+                    className="input-field"
+                    placeholder={`https://example.com/${selectedNodeData.type}.${selectedNodeData.type === 'image' ? 'jpg' : selectedNodeData.type === 'video' ? 'mp4' : selectedNodeData.type === 'audio' ? 'mp3' : 'pdf'}`}
+                  />
+                </div>
+              )}
+
+              {/* AI Response Configuration */}
+              {selectedNodeData.type === 'ai_response' && (
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+                      AI Model
+                    </label>
+                    <select
+                      value={selectedNodeData.data.aiModel || 'gpt-3.5-turbo'}
+                      onChange={(e) => handleNodeUpdate(selectedNodeData.id, {
+                        data: { ...selectedNodeData.data, aiModel: e.target.value }
+                      })}
+                      className="input-field"
+                    >
+                      <option value="gpt-3.5-turbo">GPT-3.5 Turbo</option>
+                      <option value="gpt-4">GPT-4</option>
+                      <option value="claude-3-sonnet">Claude 3 Sonnet</option>
+                      <option value="llama-2">Llama 2</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+                      Custom Prompt
+                    </label>
+                    <textarea
+                      value={selectedNodeData.data.aiPrompt || ''}
+                      onChange={(e) => handleNodeUpdate(selectedNodeData.id, {
+                        data: { ...selectedNodeData.data, aiPrompt: e.target.value }
+                      })}
+                      rows={3}
+                      className="input-field"
+                      placeholder="You are a helpful assistant..."
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+                      Temperature: {selectedNodeData.data.temperature || 0.7}
+                    </label>
+                    <input
+                      type="range"
+                      min="0"
+                      max="2"
+                      step="0.1"
+                      value={selectedNodeData.data.temperature || 0.7}
+                      onChange={(e) => handleNodeUpdate(selectedNodeData.id, {
+                        data: { ...selectedNodeData.data, temperature: parseFloat(e.target.value) }
+                      })}
+                      className="w-full"
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* Input Validation */}
+              {(['email_input', 'phone_input', 'number_input', 'input'].includes(selectedNodeData.type)) && (
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+                    Input Validation
+                  </label>
+                  <select
+                    value={selectedNodeData.data.validation?.type || 'none'}
+                    onChange={(e) => handleNodeUpdate(selectedNodeData.id, {
+                                              data: { 
+                          ...selectedNodeData.data, 
+                          validation: { 
+                            ...selectedNodeData.data.validation,
+                            type: e.target.value as 'email' | 'phone' | 'number' | 'url' | 'regex'
+                          }
+                        }
+                    })}
+                    className="input-field"
+                  >
+                    <option value="none">No validation</option>
+                    <option value="email">Email format</option>
+                    <option value="phone">Phone number</option>
+                    <option value="number">Number only</option>
+                    <option value="url">URL format</option>
+                    <option value="regex">Custom regex</option>
+                  </select>
+                  
+                  {selectedNodeData.data.validation?.type === 'regex' && (
+                    <input
+                      type="text"
+                      placeholder="Regex pattern"
+                      value={selectedNodeData.data.validation?.pattern || ''}
+                      onChange={(e) => handleNodeUpdate(selectedNodeData.id, {
+                        data: { 
+                          ...selectedNodeData.data, 
+                          validation: { 
+                            type: selectedNodeData.data.validation?.type || 'regex',
+                            ...selectedNodeData.data.validation,
+                            pattern: e.target.value
+                          }
+                        }
+                      })}
+                      className="input-field mt-2"
+                    />
+                  )}
+                </div>
+              )}
+
+              {/* Rating Configuration */}
+              {selectedNodeData.type === 'rating' && (
+                <div className="space-y-3">
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+                      Rating Scale
+                    </label>
+                    <select
+                      value={selectedNodeData.data.ratingScale || 5}
+                      onChange={(e) => handleNodeUpdate(selectedNodeData.id, {
+                        data: { ...selectedNodeData.data, ratingScale: parseInt(e.target.value) }
+                      })}
+                      className="input-field"
+                    >
+                      <option value={3}>3-point scale</option>
+                      <option value={5}>5-point scale</option>
+                      <option value={10}>10-point scale</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+                      Labels (optional)
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="Poor, Fair, Good, Very Good, Excellent"
+                      value={selectedNodeData.data.ratingLabels?.join(', ') || ''}
+                      onChange={(e) => handleNodeUpdate(selectedNodeData.id, {
+                        data: { ...selectedNodeData.data, ratingLabels: e.target.value.split(',').map(s => s.trim()) }
+                      })}
+                      className="input-field"
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* Delay Configuration */}
+              {selectedNodeData.type === 'delay' && (
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+                    Delay Duration (seconds)
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    max="300"
+                    value={selectedNodeData.data.delayDuration || 3}
+                    onChange={(e) => handleNodeUpdate(selectedNodeData.id, {
+                      data: { ...selectedNodeData.data, delayDuration: parseInt(e.target.value) }
+                    })}
+                    className="input-field"
+                  />
+                </div>
+              )}
+
+              {/* E-commerce Configuration */}
+              {(['product_catalog', 'add_to_cart', 'checkout'].includes(selectedNodeData.type)) && (
+                <div className="space-y-3">
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+                      Product ID
+                    </label>
+                    <input
+                      type="text"
+                      value={selectedNodeData.data.productId || ''}
+                      onChange={(e) => handleNodeUpdate(selectedNodeData.id, {
+                        data: { ...selectedNodeData.data, productId: e.target.value }
+                      })}
+                      className="input-field"
+                      placeholder="PROD-12345"
+                    />
+                  </div>
+                  {selectedNodeData.type !== 'product_catalog' && (
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+                          Price
+                        </label>
+                        <input
+                          type="number"
+                          step="0.01"
+                          value={selectedNodeData.data.price || ''}
+                          onChange={(e) => handleNodeUpdate(selectedNodeData.id, {
+                            data: { ...selectedNodeData.data, price: parseFloat(e.target.value) }
+                          })}
+                          className="input-field"
+                          placeholder="29.99"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+                          Currency
+                        </label>
+                        <select
+                          value={selectedNodeData.data.currency || 'USD'}
+                          onChange={(e) => handleNodeUpdate(selectedNodeData.id, {
+                            data: { ...selectedNodeData.data, currency: e.target.value }
+                          })}
+                          className="input-field"
+                        >
+                          <option value="USD">USD</option>
+                          <option value="EUR">EUR</option>
+                          <option value="GBP">GBP</option>
+                          <option value="JPY">JPY</option>
+                        </select>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Analytics Configuration */}
+              {(['analytics_event', 'conversion_tracking', 'goal_tracking'].includes(selectedNodeData.type)) && (
+                <div className="space-y-3">
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+                      Event Name
+                    </label>
+                    <input
+                      type="text"
+                      value={selectedNodeData.data.eventName || ''}
+                      onChange={(e) => handleNodeUpdate(selectedNodeData.id, {
+                        data: { ...selectedNodeData.data, eventName: e.target.value }
+                      })}
+                      className="input-field"
+                      placeholder="button_click, form_submit, purchase"
+                    />
+                  </div>
+                  {selectedNodeData.type === 'goal_tracking' && (
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+                        Goal ID
+                      </label>
+                      <input
+                        type="text"
+                        value={selectedNodeData.data.goalId || ''}
+                        onChange={(e) => handleNodeUpdate(selectedNodeData.id, {
+                          data: { ...selectedNodeData.data, goalId: e.target.value }
+                        })}
+                        className="input-field"
+                        placeholder="GOAL-001"
+                      />
+                    </div>
+                  )}
+                </div>
+              )}
+
               <div className="pt-4 border-t border-slate-200 dark:border-slate-700">
                 <h4 className="font-medium text-slate-900 dark:text-slate-100 mb-3">Node Information</h4>
                 <div className="space-y-2 text-xs text-slate-600 dark:text-slate-400">
@@ -978,6 +1832,24 @@ const BotBuilder = () => {
                     <Copy className="w-4 h-4 mr-2" />
                     Duplicate Node
                   </button>
+                  
+                  <button 
+                    onClick={() => {
+                      if (!selectedNodeData) return
+                      // Export node configuration
+                      const nodeConfig = {
+                        type: selectedNodeData.type,
+                        data: selectedNodeData.data
+                      }
+                      navigator.clipboard.writeText(JSON.stringify(nodeConfig, null, 2))
+                      toast.success('Node configuration copied to clipboard')
+                    }}
+                    className="btn-ghost w-full text-sm text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20"
+                  >
+                    <Copy className="w-4 h-4 mr-2" />
+                    Copy Config
+                  </button>
+                  
                   <button 
                     onClick={() => handleNodeDelete(selectedNodeData.id)}
                     className="btn-ghost w-full text-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20"

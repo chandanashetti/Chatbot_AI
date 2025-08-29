@@ -160,27 +160,65 @@ class BotRuntime {
 
     // Process based on node type
     switch (currentNode.type) {
+      // Basic nodes
       case 'message':
         return await this.processMessageNode(currentNode, conversation, userMessage);
-      
       case 'question':
         return await this.processQuestionNode(currentNode, conversation, userMessage);
+      case 'quick_replies':
+        return await this.processQuickRepliesNode(currentNode, conversation, userMessage);
+      case 'input':
+        return await this.processInputNode(currentNode, conversation, userMessage);
       
+      // Logic & flow control
       case 'condition':
         return await this.processConditionNode(currentNode, conversation, userMessage);
+      case 'random':
+        return await this.processRandomNode(currentNode, conversation, userMessage);
+      case 'delay':
+        return await this.processDelayNode(currentNode, conversation, userMessage);
       
+      // Actions & processing
       case 'action':
         return await this.processActionNode(currentNode, conversation, userMessage);
+      case 'variable':
+        return await this.processVariableNode(currentNode, conversation, userMessage);
+      case 'validation':
+        return await this.processValidationNode(currentNode, conversation, userMessage);
       
+      // AI & intelligence
+      case 'ai_response':
+        return await this.processAIResponseNode(currentNode, conversation, userMessage);
+      
+      // Media & rich content
+      case 'image':
+      case 'video':
+      case 'audio':
+      case 'document':
+        return await this.processMediaNode(currentNode, conversation, userMessage);
+      
+      // Forms & data collection
+      case 'email_input':
+      case 'phone_input':
+      case 'number_input':
+      case 'rating':
+        return await this.processFormInputNode(currentNode, conversation, userMessage);
+      
+      // Integrations
       case 'webhook':
         return await this.processWebhookNode(currentNode, conversation, userMessage);
       
+      // Analytics & tracking
+      case 'analytics_event':
+        return await this.processAnalyticsEventNode(currentNode, conversation, userMessage);
+      
+      // Advanced features
       case 'handoff':
         return await this.processHandoffNode(currentNode, conversation, userMessage);
       
       default:
         return {
-          content: this.bot.settings.behavior.fallbackMessage,
+          content: this.bot.settings.behavior.fallbackMessage || 'I\'m not sure how to handle that. Can you rephrase?',
           type: 'text'
         };
     }
@@ -717,6 +755,438 @@ Response language: ${personality.language || 'en'}`;
       }
     } catch (error) {
       console.error('Analytics update error:', error);
+    }
+  }
+
+  // New node processors for advanced functionality
+
+  async processQuickRepliesNode(node, conversation, userMessage) {
+    let content = node.data.content || 'Please choose an option:';
+    content = this.processVariables(content, conversation.flowState.variables);
+
+    const buttons = node.data.buttons || [];
+    const nextNode = this.findNextNode(node, conversation);
+
+    return {
+      content,
+      type: 'quick_replies',
+      options: buttons.map(btn => btn.title),
+      nodeId: node.id,
+      flowState: {
+        currentNode: nextNode?.id || null
+      }
+    };
+  }
+
+  async processInputNode(node, conversation, userMessage) {
+    const validation = node.data.validation || {};
+    
+    if (conversation.flowState.currentNode === node.id && userMessage) {
+      // Validate input if validation is configured
+      if (validation.type && validation.type !== 'none') {
+        const isValid = this.validateInput(userMessage, validation);
+        if (!isValid) {
+          return {
+            content: validation.message || 'Please provide a valid input.',
+            type: 'text',
+            nodeId: node.id,
+            flowState: { currentNode: node.id } // Stay on current node
+          };
+        }
+      }
+
+      // Store the input
+      const variableName = node.data.variableName || `input_${node.id}`;
+      conversation.flowState.variables[variableName] = userMessage;
+
+      // Move to next node
+      const nextNode = this.findNextNode(node, conversation);
+      if (nextNode) {
+        return await this.executeFlow({
+          ...conversation,
+          flowState: {
+            ...conversation.flowState,
+            currentNode: nextNode.id
+          }
+        }, null);
+      }
+    }
+
+    // Show input prompt
+    let content = node.data.content || 'Please provide your input:';
+    content = this.processVariables(content, conversation.flowState.variables);
+
+    return {
+      content,
+      type: 'input',
+      nodeId: node.id,
+      flowState: { currentNode: node.id }
+    };
+  }
+
+  async processRandomNode(node, conversation, userMessage) {
+    const connections = this.bot.flow.connections.filter(conn => conn.source === node.id);
+    
+    if (connections.length > 0) {
+      const randomConnection = connections[Math.floor(Math.random() * connections.length)];
+      const nextNode = this.findNodeById(randomConnection.target);
+      
+      if (nextNode) {
+        return await this.executeFlow({
+          ...conversation,
+          flowState: {
+            ...conversation.flowState,
+            currentNode: nextNode.id
+          }
+        }, userMessage);
+      }
+    }
+
+    return {
+      content: 'Random selection could not be made.',
+      type: 'text',
+      nodeId: node.id
+    };
+  }
+
+  async processDelayNode(node, conversation, userMessage) {
+    const delayDuration = (node.data.delayDuration || 3) * 1000; // Convert to milliseconds
+    
+    // Simulate delay (in real implementation, you might use a job queue)
+    setTimeout(async () => {
+      const nextNode = this.findNextNode(node, conversation);
+      if (nextNode) {
+        // In a real implementation, you'd need to continue the flow after delay
+        // This is a simplified version
+        console.log(`Continuing flow after ${delayDuration}ms delay to node ${nextNode.id}`);
+      }
+    }, delayDuration);
+
+    const nextNode = this.findNextNode(node, conversation);
+    
+    return {
+      content: node.data.content || `Processing... (${node.data.delayDuration || 3}s)`,
+      type: 'text',
+      nodeId: node.id,
+      flowState: {
+        currentNode: nextNode?.id || null
+      },
+      metadata: {
+        delayDuration: delayDuration
+      }
+    };
+  }
+
+  async processVariableNode(node, conversation, userMessage) {
+    const variableName = node.data.variableName;
+    const variableValue = node.data.variableValue;
+
+    if (variableName) {
+      // Process variable value (might contain other variables)
+      const processedValue = this.processVariables(variableValue || '', conversation.flowState.variables);
+      conversation.flowState.variables[variableName] = processedValue;
+    }
+
+    const nextNode = this.findNextNode(node, conversation);
+    let content = node.data.content || `Variable ${variableName} set to ${variableValue}`;
+    content = this.processVariables(content, conversation.flowState.variables);
+
+    return {
+      content,
+      type: 'text',
+      nodeId: node.id,
+      flowState: {
+        currentNode: nextNode?.id || null,
+        variables: conversation.flowState.variables
+      }
+    };
+  }
+
+  async processValidationNode(node, conversation, userMessage) {
+    const validation = node.data.validation || {};
+    
+    if (userMessage) {
+      const isValid = this.validateInput(userMessage, validation);
+      
+      // Store validation result
+      conversation.flowState.variables[`${node.id}_valid`] = isValid;
+      
+      if (isValid) {
+        conversation.flowState.variables[`${node.id}_value`] = userMessage;
+      }
+
+      const nextNode = this.findNextNode(node, conversation);
+      
+      return {
+        content: isValid ? 
+          (node.data.successMessage || 'Input is valid!') : 
+          (node.data.errorMessage || validation.message || 'Invalid input provided.'),
+        type: 'text',
+        nodeId: node.id,
+        flowState: {
+          currentNode: nextNode?.id || null
+        },
+        metadata: {
+          validationResult: isValid,
+          validatedValue: isValid ? userMessage : null
+        }
+      };
+    }
+
+    return {
+      content: node.data.content || 'Please provide input for validation:',
+      type: 'text',
+      nodeId: node.id,
+      flowState: { currentNode: node.id }
+    };
+  }
+
+  async processAIResponseNode(node, conversation, userMessage) {
+    try {
+      if (!this.openaiClient) {
+        return {
+          content: 'AI response is not available at the moment.',
+          type: 'text',
+          nodeId: node.id
+        };
+      }
+
+      // Use custom prompt if provided, otherwise use general prompt
+      const systemPrompt = node.data.aiPrompt || this.buildSystemPrompt('', conversation);
+      const model = node.data.aiModel || this.bot.settings.ai.model || 'gpt-3.5-turbo';
+      const temperature = node.data.temperature || this.bot.settings.ai.temperature || 0.7;
+
+      const completion = await this.openaiClient.chat.completions.create({
+        model,
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: userMessage || 'Hello' }
+        ],
+        temperature,
+        max_tokens: this.bot.settings.ai.maxTokens || 1000
+      });
+
+      const aiResponse = completion.choices[0].message.content;
+      const nextNode = this.findNextNode(node, conversation);
+
+      return {
+        content: aiResponse,
+        type: 'text',
+        nodeId: node.id,
+        flowState: {
+          currentNode: nextNode?.id || null
+        },
+        metadata: {
+          aiModel: model,
+          temperature,
+          usage: completion.usage
+        }
+      };
+
+    } catch (error) {
+      console.error('AI Response error:', error);
+      const nextNode = this.findNextNode(node, conversation);
+      
+      return {
+        content: 'I encountered an issue generating a response. Please try again.',
+        type: 'text',
+        nodeId: node.id,
+        flowState: {
+          currentNode: nextNode?.id || null
+        }
+      };
+    }
+  }
+
+  async processMediaNode(node, conversation, userMessage) {
+    const mediaUrl = node.data.mediaUrl;
+    const mediaType = node.type;
+    
+    if (!mediaUrl) {
+      return {
+        content: `${mediaType} content is not configured.`,
+        type: 'text',
+        nodeId: node.id
+      };
+    }
+
+    const nextNode = this.findNextNode(node, conversation);
+    let content = node.data.content || '';
+
+    return {
+      content,
+      type: mediaType,
+      mediaUrl,
+      nodeId: node.id,
+      flowState: {
+        currentNode: nextNode?.id || null
+      }
+    };
+  }
+
+  async processFormInputNode(node, conversation, userMessage) {
+    const inputType = node.type;
+    
+    if (conversation.flowState.currentNode === node.id && userMessage) {
+      let isValid = true;
+      let errorMessage = '';
+
+      // Validate based on input type
+      switch (inputType) {
+        case 'email_input':
+          isValid = this.isValidEmail(userMessage);
+          errorMessage = 'Please provide a valid email address.';
+          break;
+        case 'phone_input':
+          isValid = this.isValidPhone(userMessage);
+          errorMessage = 'Please provide a valid phone number.';
+          break;
+        case 'number_input':
+          isValid = !isNaN(parseFloat(userMessage));
+          errorMessage = 'Please provide a valid number.';
+          break;
+        case 'rating':
+          const ratingScale = node.data.ratingScale || 5;
+          const rating = parseInt(userMessage);
+          isValid = !isNaN(rating) && rating >= 1 && rating <= ratingScale;
+          errorMessage = `Please provide a rating between 1 and ${ratingScale}.`;
+          break;
+      }
+
+      if (!isValid) {
+        return {
+          content: errorMessage,
+          type: 'text',
+          nodeId: node.id,
+          flowState: { currentNode: node.id }
+        };
+      }
+
+      // Store the validated input
+      const variableName = inputType === 'email_input' ? 'email' : 
+                          inputType === 'phone_input' ? 'phone' :
+                          inputType === 'number_input' ? 'number' :
+                          inputType === 'rating' ? 'rating' : `${node.id}_value`;
+      
+      conversation.flowState.variables[variableName] = userMessage;
+
+      const nextNode = this.findNextNode(node, conversation);
+      if (nextNode) {
+        return await this.executeFlow({
+          ...conversation,
+          flowState: {
+            ...conversation.flowState,
+            currentNode: nextNode.id
+          }
+        }, null);
+      }
+    }
+
+    // Show input prompt
+    let content = node.data.content || '';
+    if (!content) {
+      switch (inputType) {
+        case 'email_input':
+          content = 'Please provide your email address:';
+          break;
+        case 'phone_input':
+          content = 'Please provide your phone number:';
+          break;
+        case 'number_input':
+          content = 'Please provide a number:';
+          break;
+        case 'rating':
+          const scale = node.data.ratingScale || 5;
+          content = `Please rate from 1 to ${scale}:`;
+          break;
+        default:
+          content = 'Please provide your input:';
+      }
+    }
+
+    content = this.processVariables(content, conversation.flowState.variables);
+
+    return {
+      content,
+      type: inputType,
+      nodeId: node.id,
+      flowState: { currentNode: node.id },
+      metadata: {
+        inputType,
+        ratingScale: node.data.ratingScale,
+        ratingLabels: node.data.ratingLabels
+      }
+    };
+  }
+
+  async processAnalyticsEventNode(node, conversation, userMessage) {
+    const eventName = node.data.eventName || `custom_event_${node.id}`;
+    const eventProperties = node.data.eventProperties || {};
+
+    // Track the event (in a real implementation, send to analytics service)
+    console.log(`Analytics Event: ${eventName}`, {
+      ...eventProperties,
+      conversationId: conversation.conversationId,
+      sessionId: conversation.sessionId,
+      nodeId: node.id,
+      timestamp: new Date()
+    });
+
+    // Store event in conversation metadata
+    if (!conversation.metadata) conversation.metadata = {};
+    if (!conversation.metadata.events) conversation.metadata.events = [];
+    
+    conversation.metadata.events.push({
+      name: eventName,
+      properties: eventProperties,
+      timestamp: new Date(),
+      nodeId: node.id
+    });
+
+    const nextNode = this.findNextNode(node, conversation);
+    let content = node.data.content || '';
+
+    return {
+      content,
+      type: 'text',
+      nodeId: node.id,
+      flowState: {
+        currentNode: nextNode?.id || null
+      },
+      metadata: {
+        eventTracked: eventName
+      }
+    };
+  }
+
+  // Helper method for input validation
+  validateInput(input, validation) {
+    if (!validation || !validation.type || validation.type === 'none') {
+      return true;
+    }
+
+    switch (validation.type) {
+      case 'email':
+        return this.isValidEmail(input);
+      case 'phone':
+        return this.isValidPhone(input);
+      case 'number':
+        return !isNaN(parseFloat(input));
+      case 'url':
+        try {
+          new URL(input);
+          return true;
+        } catch {
+          return false;
+        }
+      case 'regex':
+        if (validation.pattern) {
+          const regex = new RegExp(validation.pattern);
+          return regex.test(input);
+        }
+        return true;
+      default:
+        return true;
     }
   }
 }
