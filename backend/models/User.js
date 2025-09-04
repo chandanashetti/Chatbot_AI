@@ -1,48 +1,65 @@
 const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
+const crypto = require('crypto');
 
+// User Permissions Schema
 const permissionsSchema = new mongoose.Schema({
-  admin: {
-    create: { type: Boolean, default: false },
-    read: { type: Boolean, default: false },
-    update: { type: Boolean, default: false },
-    delete: { type: Boolean, default: false }
-  },
-  bots: {
-    create: { type: Boolean, default: false },
-    read: { type: Boolean, default: false },
-    update: { type: Boolean, default: false },
-    delete: { type: Boolean, default: false },
-    deploy: { type: Boolean, default: false }
-  },
-  knowledgeBase: {
-    upload: { type: Boolean, default: false },
-    read: { type: Boolean, default: false },
-    delete: { type: Boolean, default: false },
+  // Dashboard permissions
+  dashboard: {
+    view: { type: Boolean, default: false },
     export: { type: Boolean, default: false }
   },
+  
+  // User management permissions
+  users: {
+    view: { type: Boolean, default: false },
+    create: { type: Boolean, default: false },
+    edit: { type: Boolean, default: false },
+    delete: { type: Boolean, default: false },
+    manageRoles: { type: Boolean, default: false }
+  },
+  
+  // Bot management permissions
+  bots: {
+    view: { type: Boolean, default: false },
+    create: { type: Boolean, default: false },
+    edit: { type: Boolean, default: false },
+    delete: { type: Boolean, default: false },
+    publish: { type: Boolean, default: false }
+  },
+  
+  // Agent management permissions
+  agents: {
+    view: { type: Boolean, default: false },
+    create: { type: Boolean, default: false },
+    edit: { type: Boolean, default: false },
+    delete: { type: Boolean, default: false },
+    assign: { type: Boolean, default: false }
+  },
+  
+  // Analytics permissions
   analytics: {
     view: { type: Boolean, default: false },
     export: { type: Boolean, default: false },
     advanced: { type: Boolean, default: false }
   },
+  
+  // Knowledge base permissions
+  knowledgeBase: {
+    view: { type: Boolean, default: false },
+    upload: { type: Boolean, default: false },
+    edit: { type: Boolean, default: false },
+    delete: { type: Boolean, default: false }
+  },
+  
+  // Settings permissions
   settings: {
     view: { type: Boolean, default: false },
-    update: { type: Boolean, default: false },
+    edit: { type: Boolean, default: false },
     system: { type: Boolean, default: false }
   },
-  users: {
-    create: { type: Boolean, default: false },
-    read: { type: Boolean, default: false },
-    update: { type: Boolean, default: false },
-    delete: { type: Boolean, default: false },
-    permissions: { type: Boolean, default: false }
-  },
-  integrations: {
-    view: { type: Boolean, default: false },
-    configure: { type: Boolean, default: false },
-    connect: { type: Boolean, default: false }
-  },
+  
+  // Chat management permissions
   chat: {
     view: { type: Boolean, default: false },
     moderate: { type: Boolean, default: false },
@@ -50,151 +67,345 @@ const permissionsSchema = new mongoose.Schema({
   }
 }, { _id: false });
 
+// User Profile Schema
+const profileSchema = new mongoose.Schema({
+  firstName: { type: String, required: true, trim: true },
+  lastName: { type: String, required: true, trim: true },
+  avatar: { type: String, default: null },
+  phone: { type: String, trim: true },
+  timezone: { type: String, default: 'UTC' },
+  language: { type: String, default: 'en' },
+  bio: { type: String, maxlength: 500 },
+  department: { type: String, trim: true },
+  jobTitle: { type: String, trim: true },
+  manager: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+  location: {
+    country: { type: String, trim: true },
+    city: { type: String, trim: true },
+    address: { type: String, trim: true }
+  },
+  socialLinks: {
+    linkedin: { type: String, trim: true },
+    twitter: { type: String, trim: true },
+    github: { type: String, trim: true }
+  }
+}, { _id: false });
+
+// Security Settings Schema
+const securitySchema = new mongoose.Schema({
+  twoFactorEnabled: { type: Boolean, default: false },
+  twoFactorSecret: { type: String, select: false },
+  backupCodes: [{ type: String, select: false }],
+  passwordChangedAt: { type: Date, default: Date.now },
+  failedLoginAttempts: { type: Number, default: 0 },
+  lockUntil: { type: Date },
+  ipWhitelist: [{ type: String }],
+  sessionTimeout: { type: Number, default: 24 }, // hours
+  forcePasswordChange: { type: Boolean, default: false }
+}, { _id: false });
+
+// Preferences Schema
+const preferencesSchema = new mongoose.Schema({
+  theme: { type: String, enum: ['light', 'dark', 'auto'], default: 'light' },
+  notifications: {
+    email: { type: Boolean, default: true },
+    browser: { type: Boolean, default: true },
+    mobile: { type: Boolean, default: true },
+    marketing: { type: Boolean, default: false }
+  },
+  dashboard: {
+    defaultView: { type: String, default: 'overview' },
+    refreshInterval: { type: Number, default: 30 }, // seconds
+    showWelcome: { type: Boolean, default: true }
+  },
+  privacy: {
+    profileVisibility: { type: String, enum: ['public', 'team', 'private'], default: 'team' },
+    activityTracking: { type: Boolean, default: true }
+  }
+}, { _id: false });
+
+// Main User Schema
 const userSchema = new mongoose.Schema({
-  email: { 
-    type: String, 
-    required: true, 
+  // Basic Information
+  email: {
+    type: String,
+    required: [true, 'Email is required'],
+    unique: true,
     lowercase: true,
-    trim: true
+    trim: true,
+    match: [/^\w+([.-]?\w+)*@\w+([.-]?\w+)*(\.\w{2,3})+$/, 'Please enter a valid email']
   },
-  password: { 
-    type: String, 
-    required: true,
-    minlength: 6
+  
+  username: {
+    type: String,
+    unique: true,
+    sparse: true,
+    trim: true,
+    minlength: 3,
+    maxlength: 30,
+    match: [/^[a-zA-Z0-9_-]+$/, 'Username can only contain letters, numbers, underscores, and hyphens']
   },
-  name: { 
-    type: String, 
-    required: true,
-    trim: true
+  
+  password: {
+    type: String,
+    required: [true, 'Password is required'],
+    minlength: 8,
+    select: false
   },
-  avatar: { type: String },
-  role: { 
-    type: String, 
-    required: true,
-    enum: ['superadmin', 'admin', 'manager', 'operator', 'viewer'],
+  
+  // Role and Status
+  role: {
+    type: String,
+    enum: ['superadmin', 'admin', 'manager', 'operator', 'viewer', 'agent'],
     default: 'viewer'
   },
-  status: { 
-    type: String, 
-    default: 'active',
-    enum: ['active', 'inactive', 'suspended', 'pending']
+  
+  status: {
+    type: String,
+    enum: ['active', 'inactive', 'pending', 'suspended', 'deleted'],
+    default: 'pending'
   },
-  permissions: { type: permissionsSchema, default: () => ({}) },
+  
+  // Detailed Profile
   profile: {
-    department: { type: String },
-    phoneNumber: { type: String },
-    timezone: { type: String, default: 'UTC' },
-    language: { type: String, default: 'en' },
-    bio: { type: String },
-    socialLinks: {
-      linkedin: { type: String },
-      twitter: { type: String },
-      github: { type: String }
-    }
+    type: profileSchema,
+    required: true
   },
+  
+  // Permissions
+  permissions: {
+    type: permissionsSchema,
+    default: () => ({})
+  },
+  
+  // Security Settings
   security: {
-    twoFactorEnabled: { type: Boolean, default: false },
-    twoFactorSecret: { type: String },
-    loginAttempts: { type: Number, default: 0 },
-    lockoutUntil: { type: Date },
-    lastPasswordChange: { type: Date, default: Date.now },
-    passwordResetToken: { type: String },
-    passwordResetExpires: { type: Date }
+    type: securitySchema,
+    default: () => ({})
   },
-  activity: {
-    lastLogin: { type: Date },
-    lastIpAddress: { type: String },
-    lastUserAgent: { type: String },
-    loginCount: { type: Number, default: 0 }
-  },
+  
+  // User Preferences
   preferences: {
-    emailNotifications: { type: Boolean, default: true },
-    darkMode: { type: Boolean, default: false },
-    defaultModel: { type: String },
-    autoSave: { type: Boolean, default: true }
+    type: preferencesSchema,
+    default: () => ({})
   },
-  apiKeys: [{
-    name: { type: String, required: true },
-    key: { type: String, required: true },
-    permissions: [String],
-    lastUsed: { type: Date },
-    expiresAt: { type: Date },
-    isActive: { type: Boolean, default: true }
-  }],
-  createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }
+  
+  // Authentication Tokens
+  emailVerificationToken: { type: String, select: false },
+  emailVerificationExpires: { type: Date, select: false },
+  passwordResetToken: { type: String, select: false },
+  passwordResetExpires: { type: Date, select: false },
+  
+  // Activity Tracking
+  lastLogin: { type: Date },
+  lastActivity: { type: Date },
+  loginCount: { type: Number, default: 0 },
+  
+  // Metadata
+  createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+  updatedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+  invitedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+  
+  // Soft Delete
+  isDeleted: { type: Boolean, default: false },
+  deletedAt: { type: Date },
+  deletedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }
 }, {
   timestamps: true,
-  collection: 'users'
+  toJSON: { 
+    virtuals: true,
+    transform: function(doc, ret) {
+      delete ret.password;
+      delete ret.__v;
+      return ret;
+    }
+  },
+  toObject: { virtuals: true }
 });
 
 // Indexes
 userSchema.index({ email: 1 });
+userSchema.index({ username: 1 }, { sparse: true });
 userSchema.index({ role: 1 });
 userSchema.index({ status: 1 });
-userSchema.index({ 'activity.lastLogin': -1 });
+userSchema.index({ 'profile.firstName': 1, 'profile.lastName': 1 });
 userSchema.index({ createdAt: -1 });
+userSchema.index({ lastLogin: -1 });
+userSchema.index({ isDeleted: 1 });
 
-// Hash password before saving
-userSchema.pre('save', async function(next) {
-  if (!this.isModified('password')) return next();
-  
-  try {
-    const salt = await bcrypt.genSalt(12);
-    this.password = await bcrypt.hash(this.password, salt);
-    this.security.lastPasswordChange = new Date();
-    next();
-  } catch (error) {
-    next(error);
-  }
+// Virtual for full name
+userSchema.virtual('fullName').get(function() {
+  return `${this.profile.firstName} ${this.profile.lastName}`.trim();
 });
 
-// Compare password method
-userSchema.methods.comparePassword = async function(candidatePassword) {
-  return bcrypt.compare(candidatePassword, this.password);
-};
+// Virtual for account lock status
+userSchema.virtual('isLocked').get(function() {
+  return !!(this.security.lockUntil && this.security.lockUntil > Date.now());
+});
 
-// Check if account is locked
-userSchema.methods.isLocked = function() {
-  return !!(this.security.lockoutUntil && this.security.lockoutUntil > Date.now());
-};
-
-// Increment login attempts
-userSchema.methods.incLoginAttempts = function() {
-  // If we have a previous lock that has expired, restart at 1
-  if (this.security.lockoutUntil && this.security.lockoutUntil < Date.now()) {
-    return this.updateOne({
-      $unset: { 'security.lockoutUntil': 1 },
-      $set: { 'security.loginAttempts': 1 }
-    });
+// Pre-save middleware
+userSchema.pre('save', async function(next) {
+  // Hash password if modified
+  if (this.isModified('password')) {
+    this.password = await bcrypt.hash(this.password, 12);
+    this.security.passwordChangedAt = Date.now();
   }
   
-  const updates = { $inc: { 'security.loginAttempts': 1 } };
+  // Update lastActivity
+  if (this.isModified('lastLogin')) {
+    this.lastActivity = Date.now();
+  }
+  
+  // Set default permissions based on role
+  if (this.isModified('role') && this.isNew) {
+    this.permissions = this.getDefaultPermissions();
+  }
+  
+  next();
+});
+
+// Instance Methods
+userSchema.methods.comparePassword = async function(candidatePassword) {
+  return await bcrypt.compare(candidatePassword, this.password);
+};
+
+userSchema.methods.generateEmailVerificationToken = function() {
+  const token = crypto.randomBytes(32).toString('hex');
+  this.emailVerificationToken = crypto.createHash('sha256').update(token).digest('hex');
+  this.emailVerificationExpires = Date.now() + 24 * 60 * 60 * 1000; // 24 hours
+  return token;
+};
+
+userSchema.methods.generatePasswordResetToken = function() {
+  const token = crypto.randomBytes(32).toString('hex');
+  this.passwordResetToken = crypto.createHash('sha256').update(token).digest('hex');
+  this.passwordResetExpires = Date.now() + 10 * 60 * 1000; // 10 minutes
+  return token;
+};
+
+userSchema.methods.incrementFailedLogin = function() {
+  // Increment failed attempts
+  this.security.failedLoginAttempts += 1;
   
   // Lock account after 5 failed attempts for 2 hours
-  if (this.security.loginAttempts + 1 >= 5 && !this.isLocked()) {
-    updates.$set = { 'security.lockoutUntil': Date.now() + 2 * 60 * 60 * 1000 };
+  if (this.security.failedLoginAttempts >= 5) {
+    this.security.lockUntil = Date.now() + 2 * 60 * 60 * 1000;
   }
   
-  return this.updateOne(updates);
+  return this.save();
 };
 
-// Reset login attempts
-userSchema.methods.resetLoginAttempts = function() {
-  return this.updateOne({
-    $unset: { 'security.lockoutUntil': 1, 'security.loginAttempts': 1 }
-  });
+userSchema.methods.resetFailedLogin = function() {
+  this.security.failedLoginAttempts = 0;
+  this.security.lockUntil = undefined;
+  return this.save();
 };
 
-// Update last login
-userSchema.methods.updateLastLogin = function(ipAddress, userAgent) {
-  return this.updateOne({
-    $set: {
-      'activity.lastLogin': new Date(),
-      'activity.lastIpAddress': ipAddress,
-      'activity.lastUserAgent': userAgent
+userSchema.methods.getDefaultPermissions = function() {
+  const rolePermissions = {
+    superadmin: {
+      dashboard: { view: true, export: true },
+      users: { view: true, create: true, edit: true, delete: true, manageRoles: true },
+      bots: { view: true, create: true, edit: true, delete: true, publish: true },
+      agents: { view: true, create: true, edit: true, delete: true, assign: true },
+      analytics: { view: true, export: true, advanced: true },
+      knowledgeBase: { view: true, upload: true, edit: true, delete: true },
+      settings: { view: true, edit: true, system: true },
+      chat: { view: true, moderate: true, export: true }
     },
-    $inc: { 'activity.loginCount': 1 }
-  });
+    admin: {
+      dashboard: { view: true, export: true },
+      users: { view: true, create: true, edit: true, delete: false, manageRoles: false },
+      bots: { view: true, create: true, edit: true, delete: true, publish: true },
+      agents: { view: true, create: true, edit: true, delete: false, assign: true },
+      analytics: { view: true, export: true, advanced: true },
+      knowledgeBase: { view: true, upload: true, edit: true, delete: false },
+      settings: { view: true, edit: true, system: false },
+      chat: { view: true, moderate: true, export: true }
+    },
+    manager: {
+      dashboard: { view: true, export: false },
+      users: { view: true, create: false, edit: false, delete: false, manageRoles: false },
+      bots: { view: true, create: true, edit: true, delete: false, publish: false },
+      agents: { view: true, create: false, edit: true, delete: false, assign: true },
+      analytics: { view: true, export: false, advanced: false },
+      knowledgeBase: { view: true, upload: true, edit: true, delete: false },
+      settings: { view: true, edit: false, system: false },
+      chat: { view: true, moderate: true, export: false }
+    },
+    operator: {
+      dashboard: { view: true, export: false },
+      users: { view: false, create: false, edit: false, delete: false, manageRoles: false },
+      bots: { view: true, create: false, edit: true, delete: false, publish: false },
+      agents: { view: true, create: false, edit: false, delete: false, assign: false },
+      analytics: { view: true, export: false, advanced: false },
+      knowledgeBase: { view: true, upload: true, edit: false, delete: false },
+      settings: { view: false, edit: false, system: false },
+      chat: { view: true, moderate: false, export: false }
+    },
+    viewer: {
+      dashboard: { view: true, export: false },
+      users: { view: false, create: false, edit: false, delete: false, manageRoles: false },
+      bots: { view: true, create: false, edit: false, delete: false, publish: false },
+      agents: { view: false, create: false, edit: false, delete: false, assign: false },
+      analytics: { view: true, export: false, advanced: false },
+      knowledgeBase: { view: true, upload: false, edit: false, delete: false },
+      settings: { view: false, edit: false, system: false },
+      chat: { view: true, moderate: false, export: false }
+    },
+    agent: {
+      dashboard: { view: true, export: false },
+      users: { view: false, create: false, edit: false, delete: false, manageRoles: false },
+      bots: { view: false, create: false, edit: false, delete: false, publish: false },
+      agents: { view: false, create: false, edit: false, delete: false, assign: false },
+      analytics: { view: false, export: false, advanced: false },
+      knowledgeBase: { view: false, upload: false, edit: false, delete: false },
+      settings: { view: false, edit: false, system: false },
+      chat: { view: true, moderate: false, export: false }
+    }
+  };
+  
+  return rolePermissions[this.role] || rolePermissions.viewer;
 };
 
-module.exports = mongoose.model('User', userSchema);
+userSchema.methods.hasPermission = function(module, action) {
+  return this.permissions[module] && this.permissions[module][action];
+};
+
+userSchema.methods.softDelete = function(deletedBy) {
+  this.isDeleted = true;
+  this.deletedAt = Date.now();
+  this.deletedBy = deletedBy;
+  this.status = 'deleted';
+  return this.save();
+};
+
+// Static Methods
+userSchema.statics.findActive = function() {
+  return this.find({ isDeleted: false, status: { $ne: 'deleted' } });
+};
+
+userSchema.statics.findByRole = function(role) {
+  return this.findActive().where('role').equals(role);
+};
+
+userSchema.statics.findByEmail = function(email) {
+  return this.findOne({ email: email.toLowerCase(), isDeleted: false });
+};
+
+userSchema.statics.search = function(query) {
+  const searchRegex = new RegExp(query, 'i');
+  return this.findActive().or([
+    { email: searchRegex },
+    { username: searchRegex },
+    { 'profile.firstName': searchRegex },
+    { 'profile.lastName': searchRegex },
+    { 'profile.department': searchRegex },
+    { 'profile.jobTitle': searchRegex }
+  ]);
+};
+
+// Create model
+const User = mongoose.model('User', userSchema);
+
+module.exports = User;

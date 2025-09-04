@@ -1,4 +1,5 @@
-import { createSlice, PayloadAction } from '@reduxjs/toolkit'
+import { createSlice, PayloadAction, createAsyncThunk } from '@reduxjs/toolkit'
+import { botsAPI } from '../../services/api'
 
 export type BotType = 'lead_generation' | 'customer_support' | 'data_collection' | 'sales' | 'survey' | 'custom'
 export type BotStatus = 'draft' | 'active' | 'inactive' | 'testing' | 'archived'
@@ -239,6 +240,18 @@ export interface BotSettings {
   }
 }
 
+export interface BotDeployment {
+  widgetId: string
+  apiKey: string
+  isDeployed: boolean
+  deployedAt?: Date
+  domains: string[]
+  customCSS: string
+  embedCode: string
+  legacyId?: string
+  platforms: BotPlatform[]
+}
+
 export interface Bot {
   id: string
   name: string
@@ -248,6 +261,7 @@ export interface Bot {
   templateId?: string
   flow: BotFlow
   settings: BotSettings
+  deployment?: BotDeployment
   analytics: {
     totalConversations: number
     activeConversations: number
@@ -444,6 +458,16 @@ const mockBots: Bot[] = [
         }
       }
     },
+    deployment: {
+      widgetId: 'widget-welleazy-ai',
+      apiKey: 'api-key-123',
+      isDeployed: true,
+      deployedAt: new Date(),
+      domains: ['welleazy.com', '*.welleazy.com'],
+      customCSS: '',
+      embedCode: '<!-- Widget embed code -->',
+      platforms: ['website', 'facebook']
+    },
     analytics: {
       totalConversations: 1247,
       activeConversations: 23,
@@ -501,6 +525,15 @@ const mockBots: Bot[] = [
         }
       }
     },
+    deployment: {
+      widgetId: 'widget-test-bot',
+      apiKey: 'api-key-456',
+      isDeployed: false,
+      domains: [],
+      customCSS: '',
+      embedCode: '',
+      platforms: ['website']
+    },
     analytics: {
       totalConversations: 45,
       activeConversations: 2,
@@ -516,8 +549,104 @@ const mockBots: Bot[] = [
   }
 ]
 
+// Async thunks for API operations
+export const publishBotAsync = createAsyncThunk(
+  'bots/publishBot',
+  async (botId: string, { rejectWithValue }) => {
+    try {
+      const response = await botsAPI.publishBot(botId)
+      return { botId, bot: response.data.bot }
+    } catch (error: any) {
+      return rejectWithValue(error.response?.data?.error || 'Failed to publish bot')
+    }
+  }
+)
+
+export const unpublishBotAsync = createAsyncThunk(
+  'bots/unpublishBot',
+  async (botId: string, { rejectWithValue }) => {
+    try {
+      const response = await botsAPI.unpublishBot(botId)
+      return { botId, bot: response.data.bot }
+    } catch (error: any) {
+      return rejectWithValue(error.response?.data?.error || 'Failed to unpublish bot')
+    }
+  }
+)
+
+export const updateBotStatusAsync = createAsyncThunk(
+  'bots/updateBotStatus',
+  async ({ botId, status }: { botId: string, status: BotStatus }, { rejectWithValue }) => {
+    try {
+      const response = await botsAPI.updateBot(botId, { status })
+      return { botId, bot: response.data.bot }
+    } catch (error: any) {
+      return rejectWithValue(error.response?.data?.error || 'Failed to update bot status')
+    }
+  }
+)
+
+export const fetchBotsAsync = createAsyncThunk(
+  'bots/fetchBots',
+  async (params: { page?: number, limit?: number, type?: string, status?: string, search?: string } = {}, { rejectWithValue }) => {
+    try {
+      const response = await botsAPI.getBots(params)
+      console.log('🔍 Fetched bots from API:', response.data)
+      // Map backend bot structure to frontend structure
+      const bots = (response.data.bots || []).map((backendBot: any) => ({
+        id: backendBot._id || backendBot.id,
+        name: backendBot.name,
+        description: backendBot.description || '',
+        type: backendBot.type,
+        status: backendBot.status,
+        templateId: backendBot.templateId,
+        flow: backendBot.flow || {
+          id: 'default-flow',
+          name: 'Main Flow',
+          description: 'Default conversation flow',
+          nodes: [],
+          connections: []
+        },
+        settings: backendBot.settings || {
+          personality: { tone: 'friendly', style: 'conversational', language: 'en' },
+          behavior: { responseDelay: 1000, typingIndicator: true, fallbackMessage: 'I didn\'t understand that.' },
+          appearance: { name: backendBot.name, welcomeMessage: 'Hello!', theme: { primaryColor: '#3B82F6' } },
+          integrations: { platforms: ['website'], webhooks: [], crm: { enabled: false } }
+        },
+        deployment: backendBot.deployment ? {
+          widgetId: backendBot.deployment.widgetId || '',
+          apiKey: backendBot.deployment.apiKey || '',
+          isDeployed: backendBot.deployment.isDeployed || false,
+          deployedAt: backendBot.deployment.deployedAt ? new Date(backendBot.deployment.deployedAt) : undefined,
+          domains: backendBot.deployment.domains || [],
+          customCSS: backendBot.deployment.customCSS || '',
+          embedCode: backendBot.deployment.embedCode || '',
+          legacyId: backendBot.deployment.legacyId,
+          platforms: backendBot.deployment.platforms || ['website']
+        } : undefined,
+        analytics: backendBot.analytics || {
+          totalConversations: 0,
+          activeConversations: 0,
+          completionRate: 0,
+          averageRating: 0,
+          lastActivity: new Date()
+        },
+        createdAt: new Date(backendBot.createdAt || Date.now()),
+        updatedAt: new Date(backendBot.updatedAt || Date.now()),
+        createdBy: backendBot.createdBy,
+        isPublished: backendBot.isPublished || false,
+        version: backendBot.version || '1.0.0'
+      }))
+      return bots
+    } catch (error: any) {
+      console.error('Failed to fetch bots:', error)
+      return rejectWithValue(error.response?.data?.error || 'Failed to fetch bots')
+    }
+  }
+)
+
 const initialState: BotState = {
-  bots: mockBots,
+  bots: [], // Start with empty array, will be populated from API
   templates: defaultTemplates,
   conversations: [],
   currentBot: null,
@@ -631,6 +760,7 @@ const botSlice = createSlice({
     setBuilderState: (state, action: PayloadAction<Partial<BotState['builderState']>>) => {
       state.builderState = { ...state.builderState, ...action.payload }
     },
+    // Legacy synchronous actions (kept for backward compatibility)
     publishBot: (state, action: PayloadAction<string>) => {
       const bot = state.bots.find(b => b.id === action.payload)
       if (bot) {
@@ -658,6 +788,7 @@ const botSlice = createSlice({
           isPublished: false,
           createdAt: new Date(),
           updatedAt: new Date(),
+          deployment: undefined, // Reset deployment for duplicated bot
           analytics: {
             totalConversations: 0,
             activeConversations: 0,
@@ -674,6 +805,126 @@ const botSlice = createSlice({
       state.bots = []
       state.pagination.totalItems = 0
     }
+  },
+  extraReducers: (builder) => {
+    // Fetch bots
+    builder
+      .addCase(fetchBotsAsync.pending, (state) => {
+        state.isLoading = true
+        state.error = null
+      })
+      .addCase(fetchBotsAsync.fulfilled, (state, action) => {
+        state.isLoading = false
+        state.bots = action.payload
+        state.error = null
+      })
+      .addCase(fetchBotsAsync.rejected, (state, action) => {
+        state.isLoading = false
+        state.error = action.payload as string
+      })
+    
+    // Publish bot
+    builder
+      .addCase(publishBotAsync.pending, (state, action) => {
+        // Don't set global loading for individual bot actions to prevent UI refresh
+        state.error = null
+        // Optimistic update - immediately update UI
+        const botId = action.meta.arg
+        const bot = state.bots.find(b => b.id === botId)
+        if (bot) {
+          bot.isPublished = true
+          bot.status = 'active'
+          bot.updatedAt = new Date()
+        }
+      })
+      .addCase(publishBotAsync.fulfilled, (state, action) => {
+        const { botId, bot } = action.payload
+        // Try to find bot by both frontend ID and backend _id
+        const existingBot = state.bots.find(b => b.id === botId || b.id === bot._id || b.id === bot.id)
+        if (existingBot && bot) {
+          // Update bot properties with server response
+          existingBot.status = bot.status || 'active'
+          existingBot.isPublished = bot.isPublished !== undefined ? bot.isPublished : true
+          existingBot.updatedAt = new Date(bot.updatedAt || new Date())
+          // Ensure deployment info is updated if present
+          if (bot.deployment) {
+            existingBot.deployment = bot.deployment
+          }
+        }
+        state.error = null
+      })
+      .addCase(publishBotAsync.rejected, (state, action) => {
+        state.error = action.payload as string
+        // Revert optimistic update on failure
+        const botId = action.meta.arg
+        const bot = state.bots.find(b => b.id === botId)
+        if (bot) {
+          bot.isPublished = false
+          bot.status = 'draft' // or previous status
+        }
+      })
+    
+    // Unpublish bot
+    builder
+      .addCase(unpublishBotAsync.pending, (state, action) => {
+        // Don't set global loading for individual bot actions to prevent UI refresh
+        state.error = null
+        // Optimistic update - immediately update UI
+        const botId = action.meta.arg
+        const bot = state.bots.find(b => b.id === botId)
+        if (bot) {
+          bot.isPublished = false
+          bot.status = 'inactive'
+          bot.updatedAt = new Date()
+        }
+      })
+      .addCase(unpublishBotAsync.fulfilled, (state, action) => {
+        const { botId, bot } = action.payload
+        // Try to find bot by both frontend ID and backend _id
+        const existingBot = state.bots.find(b => b.id === botId || b.id === bot._id || b.id === bot.id)
+        if (existingBot && bot) {
+          // Update bot properties with server response
+          existingBot.status = bot.status || 'inactive'
+          existingBot.isPublished = bot.isPublished !== undefined ? bot.isPublished : false
+          existingBot.updatedAt = new Date(bot.updatedAt || new Date())
+          // Ensure deployment info is updated if present
+          if (bot.deployment) {
+            existingBot.deployment = bot.deployment
+          }
+        }
+        state.error = null
+      })
+      .addCase(unpublishBotAsync.rejected, (state, action) => {
+        state.error = action.payload as string
+        // Revert optimistic update on failure
+        const botId = action.meta.arg
+        const bot = state.bots.find(b => b.id === botId)
+        if (bot) {
+          bot.isPublished = true
+          bot.status = 'active' // or previous status
+        }
+      })
+    
+    // Update bot status
+    builder
+      .addCase(updateBotStatusAsync.pending, (state) => {
+        state.isLoading = true
+        state.error = null
+      })
+      .addCase(updateBotStatusAsync.fulfilled, (state, action) => {
+        state.isLoading = false
+        const { botId, bot } = action.payload
+        const existingBot = state.bots.find(b => b.id === botId)
+        if (existingBot && bot) {
+          existingBot.status = bot.status
+          existingBot.updatedAt = new Date(bot.updatedAt || new Date())
+        }
+        state.error = null
+      })
+      .addCase(updateBotStatusAsync.rejected, (state, action) => {
+        state.isLoading = false
+        state.error = action.payload as string
+      })
   }
 })
 

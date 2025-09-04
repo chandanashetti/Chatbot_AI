@@ -1,120 +1,235 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   User,
   Phone,
   Mail,
   Clock,
   CheckCircle,
-  XCircle
+  XCircle,
+  Plus,
+  Search,
+  Filter,
+  RefreshCw
 } from 'lucide-react';
+import { agentAPI, handoffAPI } from '../../services/api';
+import { toast } from 'react-hot-toast';
 
 interface Agent {
-  id: string;
+  _id: string;
+  id?: string;
   name: string;
   email: string;
-  phone: string;
-  status: 'available' | 'busy' | 'offline';
+  phone?: string;
+  status: 'available' | 'busy' | 'offline' | 'break';
+  availability: {
+    isOnline: boolean;
+    lastSeen: Date;
+    maxConcurrentChats: number;
+  };
+  metrics: {
+    totalChatsHandled: number;
   activeChats: number;
-  totalHandled: number;
-  avgResponseTime: number;
+    averageResponseTime: number;
+    customerSatisfactionScore: number;
+    ratingsCount: number;
+  };
+  skills?: Array<{
+    name: string;
+    categories: string[];
+  }>;
+  departments?: string[];
+  isActive: boolean;
+  createdAt: Date;
+  updatedAt: Date;
 }
 
 interface HandoffRequest {
-  id: string;
+  _id: string;
+  id?: string;
+  conversationId: string;
   userId: string;
   userName: string;
-  requestTime: Date;
-  status: 'pending' | 'accepted' | 'declined';
+  platform: string;
   reason: string;
-  confidence: number;
-  assignedAgent?: string;
+  category: string;
+  priority: 'low' | 'medium' | 'high' | 'critical';
+  status: 'pending' | 'assigned' | 'accepted' | 'declined' | 'completed' | 'expired';
+  aiConfidence: number;
+  assignedAgent?: {
+    _id: string;
+    name: string;
+    email: string;
+  };
+  queuePosition: number;
+  estimatedWaitTime: number;
+  createdAt: Date;
+  updatedAt: Date;
 }
 
 const AgentManagement = () => {
-  // Mock data for demo
-  const [agents, setAgents] = useState<Agent[]>([
-    {
-      id: '1',
-      name: 'Sarah Johnson',
-      email: 'sarah@company.com',
-      phone: '+1 (555) 123-4567',
-      status: 'available',
-      activeChats: 3,
-      totalHandled: 127,
-      avgResponseTime: 2.5
-    },
-    {
-      id: '2',
-      name: 'Mike Chen',
-      email: 'mike@company.com',
-      phone: '+1 (555) 234-5678',
-      status: 'busy',
-      activeChats: 5,
-      totalHandled: 89,
-      avgResponseTime: 1.8
-    },
-    {
-      id: '3',
-      name: 'Emma Davis',
-      email: 'emma@company.com',
-      phone: '+1 (555) 345-6789',
-      status: 'offline',
-      activeChats: 0,
-      totalHandled: 203,
-      avgResponseTime: 3.1
-    }
-  ]);
-  const [handoffRequests, setHandoffRequests] = useState<HandoffRequest[]>([
-    {
-      id: '1',
-      userId: 'user123',
-      userName: 'John Smith',
-      requestTime: new Date(Date.now() - 300000), // 5 minutes ago
-      status: 'pending',
-      reason: 'Complex technical issue requiring human assistance',
-      confidence: 0.3,
-    },
-    {
-      id: '2',
-      userId: 'user456',
-      userName: 'Lisa Wilson',
-      requestTime: new Date(Date.now() - 600000), // 10 minutes ago
-      status: 'accepted',
-      reason: 'Billing inquiry needs manual review',
-      confidence: 0.2,
-      assignedAgent: 'Sarah Johnson'
-    }
-  ]);
+  // State management
+  const [agents, setAgents] = useState<Agent[]>([]);
+  const [handoffRequests, setHandoffRequests] = useState<HandoffRequest[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  
+  // Filters
+  const [statusFilter, setStatusFilter] = useState('all');
+  const [searchTerm, setSearchTerm] = useState('');
+  const [showCreateModal, setShowCreateModal] = useState(false);
 
-  const handleStatusChange = (agentId: string, status: Agent['status']) => {
-    setAgents(agents.map(agent =>
-      agent.id === agentId ? { ...agent, status } : agent
-    ));
+  // Load data on component mount
+  useEffect(() => {
+    loadData();
+  }, [statusFilter, searchTerm]);
+
+  const loadData = async () => {
+    setIsLoading(true);
+    setError(null);
+    
+    try {
+      const [agentsResponse, handoffsResponse] = await Promise.all([
+        agentAPI.getAgents({
+          status: statusFilter === 'all' ? undefined : statusFilter,
+          search: searchTerm || undefined,
+          limit: 100
+        }),
+        handoffAPI.getHandoffs({
+          status: 'pending',
+          limit: 50
+        })
+      ]);
+
+      console.log('📋 Loaded agents:', agentsResponse.data.data.agents);
+      console.log('🔄 Loaded handoffs:', handoffsResponse.data.data.handoffs);
+
+      setAgents(agentsResponse.data.data.agents || []);
+      setHandoffRequests(handoffsResponse.data.data.handoffs || []);
+    } catch (error: any) {
+      console.error('❌ Error loading data:', error);
+      setError(error.response?.data?.error || 'Failed to load data');
+      toast.error('Failed to load agent data');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
-  const handleHandoffAction = (requestId: string, action: 'accept' | 'decline', agentId?: string) => {
-    setHandoffRequests(requests =>
-      requests.map(request =>
-        request.id === requestId
-          ? {
-              ...request,
-              status: action === 'accept' ? 'accepted' : 'declined',
-              assignedAgent: agentId
-            }
-          : request
-      )
-    );
+  const handleStatusChange = async (agentId: string, status: Agent['status']) => {
+    try {
+      console.log(`🔄 Updating agent ${agentId} status to ${status}...`);
+      
+      await agentAPI.updateAgentStatus(agentId, status);
+      
+      // Update local state
+    setAgents(agents.map(agent =>
+        (agent._id === agentId || agent.id === agentId) ? { ...agent, status } : agent
+      ));
+      
+      toast.success(`Agent status updated to ${status}`);
+    } catch (error: any) {
+      console.error('❌ Error updating agent status:', error);
+      toast.error(error.response?.data?.error || 'Failed to update agent status');
+    }
+  };
+
+  const handleHandoffAction = async (requestId: string, action: 'accept' | 'decline', agentId?: string) => {
+    try {
+      console.log(`🔄 ${action}ing handoff ${requestId}...`);
+      
+      if (action === 'accept' && agentId) {
+        await handoffAPI.acceptHandoff(requestId, agentId);
+      } else if (action === 'decline' && agentId) {
+        await handoffAPI.declineHandoff(requestId, agentId);
+      }
+      
+      // Reload handoff requests
+      await loadData();
+      
+      toast.success(`Handoff ${action}ed successfully`);
+    } catch (error: any) {
+      console.error(`❌ Error ${action}ing handoff:`, error);
+      toast.error(error.response?.data?.error || `Failed to ${action} handoff`);
+    }
   };
 
   return (
     <div className="space-y-6">
       {/* Header */}
+      <div className="flex items-center justify-between">
       <div>
         <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Agent Management</h1>
         <p className="text-gray-600 dark:text-gray-400">
           Manage human agents and handle chat handoff requests
         </p>
       </div>
+        
+        <div className="flex items-center space-x-2">
+          <button
+            onClick={loadData}
+            disabled={isLoading}
+            className="flex items-center space-x-2 px-4 py-2 bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600 rounded-lg transition-colors"
+          >
+            <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
+            <span>Refresh</span>
+          </button>
+          
+          <button
+            onClick={() => setShowCreateModal(true)}
+            className="flex items-center space-x-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
+          >
+            <Plus className="w-4 h-4" />
+            <span>Add Agent</span>
+          </button>
+        </div>
+      </div>
+
+      {/* Filters */}
+      <div className="flex items-center space-x-4">
+        <div className="relative flex-1 max-w-md">
+          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+          <input
+            type="text"
+            placeholder="Search agents..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="w-full pl-10 pr-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-500 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+          />
+        </div>
+        
+        <div className="flex items-center space-x-2">
+          <Filter className="w-4 h-4 text-gray-500" />
+          <select
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value)}
+            className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+          >
+            <option value="all">All Status</option>
+            <option value="available">Available</option>
+            <option value="busy">Busy</option>
+            <option value="offline">Offline</option>
+            <option value="break">On Break</option>
+          </select>
+        </div>
+      </div>
+
+      {/* Loading State */}
+      {isLoading && (
+        <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
+          <div className="flex items-center space-x-2">
+            <RefreshCw className="w-4 h-4 text-blue-600 animate-spin" />
+            <span className="text-blue-700 dark:text-blue-300">Loading agents and handoff requests...</span>
+          </div>
+        </div>
+      )}
+
+      {/* Error State */}
+      {error && (
+        <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4">
+          <div className="text-red-700 dark:text-red-300">
+            <strong>Error:</strong> {error}
+          </div>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Agent List */}
@@ -124,8 +239,13 @@ const AgentManagement = () => {
               <h2 className="text-lg font-medium text-gray-900 dark:text-white">Active Agents</h2>
             </div>
             <div className="divide-y divide-gray-200 dark:divide-gray-700">
-              {agents.map(agent => (
-                <div key={agent.id} className="px-4 py-4">
+              {agents.length === 0 && !isLoading ? (
+                <div className="px-4 py-8 text-center text-gray-500 dark:text-gray-400">
+                  No agents found. {searchTerm && 'Try adjusting your search terms.'}
+                </div>
+              ) : (
+                agents.map(agent => (
+                  <div key={agent._id || agent.id} className="px-4 py-4">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center">
                       <div className="flex-shrink-0">
@@ -142,10 +262,18 @@ const AgentManagement = () => {
                             <Mail className="w-4 h-4 mr-1" />
                             {agent.email}
                           </span>
+                            {agent.phone && (
                           <span className="flex items-center">
                             <Phone className="w-4 h-4 mr-1" />
                             {agent.phone}
                           </span>
+                            )}
+                          </div>
+                          <div className="flex items-center space-x-2 mt-1 text-xs text-gray-400">
+                            <span>Last seen: {new Date(agent.availability.lastSeen).toLocaleString()}</span>
+                            {agent.availability.isOnline && (
+                              <span className="px-2 py-0.5 bg-green-100 text-green-800 rounded-full">Online</span>
+                            )}
                         </div>
                       </div>
                     </div>
@@ -153,28 +281,44 @@ const AgentManagement = () => {
                       <div className="text-right">
                         <div className="text-sm text-gray-500">Active Chats</div>
                         <div className="text-lg font-medium text-gray-900 dark:text-white">
-                          {agent.activeChats}
+                            {agent.metrics.activeChats}
+                          </div>
+                          <div className="text-xs text-gray-500">
+                            Max: {agent.availability.maxConcurrentChats}
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <div className="text-sm text-gray-500">Total Handled</div>
+                          <div className="text-lg font-medium text-gray-900 dark:text-white">
+                            {agent.metrics.totalChatsHandled}
+                          </div>
+                          <div className="text-xs text-gray-500">
+                            Avg: {agent.metrics.averageResponseTime.toFixed(1)}s
                         </div>
                       </div>
                       <select
                         value={agent.status}
-                        onChange={(e) => handleStatusChange(agent.id, e.target.value as Agent['status'])}
+                          onChange={(e) => handleStatusChange(agent._id || agent.id!, e.target.value as Agent['status'])}
                         className={`rounded-full px-3 py-1 text-sm font-medium ${
                           agent.status === 'available'
                             ? 'bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-400'
                             : agent.status === 'busy'
                             ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/20 dark:text-yellow-400'
+                              : agent.status === 'break'
+                              ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/20 dark:text-blue-400'
                             : 'bg-gray-100 text-gray-800 dark:bg-gray-900/20 dark:text-gray-400'
                         }`}
                       >
                         <option value="available">Available</option>
                         <option value="busy">Busy</option>
+                          <option value="break">On Break</option>
                         <option value="offline">Offline</option>
                       </select>
                     </div>
                   </div>
                 </div>
-              ))}
+                ))
+              )}
             </div>
           </div>
         </div>
@@ -186,21 +330,44 @@ const AgentManagement = () => {
               <h2 className="text-lg font-medium text-gray-900 dark:text-white">Handoff Requests</h2>
             </div>
             <div className="divide-y divide-gray-200 dark:divide-gray-700">
-              {handoffRequests.map(request => (
-                <div key={request.id} className="px-4 py-4">
+              {handoffRequests.length === 0 && !isLoading ? (
+                <div className="px-4 py-8 text-center text-gray-500 dark:text-gray-400">
+                  No pending handoff requests
+                </div>
+              ) : (
+                handoffRequests.map(request => (
+                  <div key={request._id || request.id} className="px-4 py-4">
                   <div className="flex items-center justify-between mb-2">
                     <div>
                       <h4 className="font-medium text-gray-900 dark:text-white">{request.userName}</h4>
                       <div className="text-sm text-gray-500">
                         <Clock className="w-4 h-4 inline mr-1" />
-                        {new Date(request.requestTime).toLocaleTimeString()}
-                      </div>
+                          {new Date(request.createdAt).toLocaleTimeString()}
+                        </div>
+                        <div className="flex items-center space-x-2 mt-1">
+                          <span className={`px-2 py-0.5 text-xs rounded-full ${
+                            request.priority === 'critical' ? 'bg-red-100 text-red-800' :
+                            request.priority === 'high' ? 'bg-orange-100 text-orange-800' :
+                            request.priority === 'medium' ? 'bg-yellow-100 text-yellow-800' :
+                            'bg-green-100 text-green-800'
+                          }`}>
+                            {request.priority.toUpperCase()}
+                          </span>
+                          <span className="px-2 py-0.5 text-xs bg-blue-100 text-blue-800 rounded-full">
+                            {request.platform.toUpperCase()}
+                          </span>
+                          {request.queuePosition > 0 && (
+                            <span className="px-2 py-0.5 text-xs bg-gray-100 text-gray-800 rounded-full">
+                              Queue #{request.queuePosition}
+                            </span>
+                          )}
+                        </div>
                     </div>
                     <div className="text-sm">
-                      <div className="text-gray-500">Confidence</div>
+                        <div className="text-gray-500">AI Confidence</div>
                       <div className="font-medium text-gray-900 dark:text-white">
-                        {Math.round(request.confidence * 100)}%
-                      </div>
+                          {Math.round(request.aiConfidence * 100)}%
+                        </div>
                     </div>
                   </div>
                   
@@ -208,16 +375,23 @@ const AgentManagement = () => {
                     {request.reason}
                   </p>
 
+                    {request.assignedAgent && (
+                      <div className="text-sm text-blue-600 dark:text-blue-400 mb-2">
+                        Assigned to: {request.assignedAgent.name}
+                      </div>
+                    )}
+
                   {request.status === 'pending' ? (
                     <div className="flex space-x-2">
                       <button
-                        onClick={() => handleHandoffAction(request.id, 'accept')}
-                        className="flex-1 bg-green-100 text-green-700 hover:bg-green-200 dark:bg-green-900/20 dark:text-green-400 dark:hover:bg-green-900/30 px-4 py-2 rounded-md text-sm font-medium"
+                          onClick={() => handleHandoffAction(request._id || request.id!, 'accept', agents.find(a => a.status === 'available')?._id)}
+                          disabled={!agents.some(a => a.status === 'available')}
+                          className="flex-1 bg-green-100 text-green-700 hover:bg-green-200 dark:bg-green-900/20 dark:text-green-400 dark:hover:bg-green-900/30 px-4 py-2 rounded-md text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
                       >
                         Accept
                       </button>
                       <button
-                        onClick={() => handleHandoffAction(request.id, 'decline')}
+                          onClick={() => handleHandoffAction(request._id || request.id!, 'decline', agents.find(a => a.status === 'available')?._id)}
                         className="flex-1 bg-red-100 text-red-700 hover:bg-red-200 dark:bg-red-900/20 dark:text-red-400 dark:hover:bg-red-900/30 px-4 py-2 rounded-md text-sm font-medium"
                       >
                         Decline
@@ -225,25 +399,33 @@ const AgentManagement = () => {
                     </div>
                   ) : (
                     <div className={`flex items-center justify-center py-2 rounded-md text-sm font-medium ${
-                      request.status === 'accepted'
+                        request.status === 'accepted' || request.status === 'assigned'
                         ? 'text-green-700 bg-green-100 dark:text-green-400 dark:bg-green-900/20'
+                          : request.status === 'completed'
+                          ? 'text-blue-700 bg-blue-100 dark:text-blue-400 dark:bg-blue-900/20'
                         : 'text-red-700 bg-red-100 dark:text-red-400 dark:bg-red-900/20'
                     }`}>
-                      {request.status === 'accepted' ? (
+                        {request.status === 'accepted' || request.status === 'assigned' ? (
+                          <>
+                            <CheckCircle className="w-4 h-4 mr-1" />
+                            {request.status === 'accepted' ? 'Accepted' : 'Assigned'}
+                          </>
+                        ) : request.status === 'completed' ? (
                         <>
                           <CheckCircle className="w-4 h-4 mr-1" />
-                          Accepted
+                            Completed
                         </>
                       ) : (
                         <>
                           <XCircle className="w-4 h-4 mr-1" />
-                          Declined
+                            {request.status}
                         </>
                       )}
                     </div>
                   )}
                 </div>
-              ))}
+                ))
+              )}
             </div>
           </div>
         </div>

@@ -4,6 +4,7 @@ import { RootState } from '../../store/store'
 import { addBot, BotTemplate, BotType } from '../../store/slices/botSlice'
 import { X, Filter, Headphones, BarChart3 } from 'lucide-react'
 import toast from 'react-hot-toast'
+import { botsAPI } from '../../services/api'
 
 interface BotCreationModalProps {
   isOpen: boolean
@@ -57,143 +58,201 @@ const BotCreationModal = ({ isOpen, onClose, onBotCreated }: BotCreationModalPro
     createBotFromTemplate(template)
   }
 
-  const createBotFromTemplate = (template: BotTemplate) => {
-    const newBot = {
-      name: template.name,
-      description: template.description,
-      type: template.type,
-      status: 'draft' as const,
-      templateId: template.id,
-      flow: {
-        id: `flow-${Date.now()}`,
-        name: 'Main Flow',
-        description: 'Primary conversation flow',
-        nodes: [
-          {
-            id: 'start',
-            type: 'message' as const,
-            position: { x: 100, y: 100 },
-            data: {
-              title: 'Welcome Message',
-              content: template.preview.messages[0]?.content || 'Hello! How can I help you today?'
-            }
-          }
-        ],
-        connections: []
-      },
-      settings: {
-        personality: {
-          tone: 'friendly' as const,
-          style: 'conversational' as const,
-          language: 'en'
-        },
-        behavior: {
-          responseDelay: 1000,
-          typingIndicator: true,
-          fallbackMessage: 'I didn\'t understand that. Can you rephrase?',
-          maxRetries: 3,
-          handoffTriggers: ['human', 'agent', 'speak to someone']
-        },
-        appearance: {
-          avatar: '',
-          name: template.name,
-          welcomeMessage: template.preview.messages[0]?.content || 'Hello! How can I help you today?',
-          theme: {
-            primaryColor: '#3B82F6',
-            backgroundColor: '#FFFFFF',
-            textColor: '#1F2937'
-          }
-        },
-        integrations: {
-          platforms: ['website' as const],
-          webhooks: [],
-          crm: {
-            enabled: false
-          }
-        }
-      },
-      createdBy: '1',
-      isPublished: false,
-      version: '1.0.0'
-    }
+  const createBotFromTemplate = async (template: BotTemplate) => {
+    try {
+      const botData = {
+        name: template.name,
+        description: template.description,
+        type: template.type
+      }
 
-    dispatch(addBot(newBot))
-    toast.success(`${template.name} created successfully!`)
-    onClose()
-    if (onBotCreated) {
-      onBotCreated(Date.now().toString())
+      const response = await botsAPI.createBot(botData)
+      
+      if (response.data.success) {
+        // Update local Redux store with the bot from the server
+        const serverBot = response.data.bot
+        const newBot = {
+          id: serverBot.id,
+          name: serverBot.name,
+          description: serverBot.description,
+          type: serverBot.type,
+          status: serverBot.status,
+          templateId: template.id,
+          flow: serverBot.flow || {
+            id: `flow-${Date.now()}`,
+            name: 'Main Flow',
+            description: 'Primary conversation flow',
+            nodes: [
+              {
+                id: 'start',
+                type: 'message' as const,
+                position: { x: 100, y: 100 },
+                data: {
+                  title: 'Welcome Message',
+                  content: template.preview.messages[0]?.content || 'Hello! How can I help you today?'
+                }
+              }
+            ],
+            connections: []
+          },
+          settings: serverBot.settings || {
+            personality: {
+              tone: 'friendly' as const,
+              style: 'conversational' as const,
+              language: 'en'
+            },
+            behavior: {
+              responseDelay: 1000,
+              typingIndicator: true,
+              fallbackMessage: 'I didn\'t understand that. Can you rephrase?',
+              maxRetries: 3,
+              handoffTriggers: ['human', 'agent', 'speak to someone']
+            },
+            appearance: {
+              avatar: '',
+              name: template.name,
+              welcomeMessage: template.preview.messages[0]?.content || 'Hello! How can I help you today?',
+              theme: {
+                primaryColor: '#3B82F6',
+                backgroundColor: '#FFFFFF',
+                textColor: '#1F2937'
+              }
+            },
+            integrations: {
+              platforms: ['website' as const],
+              webhooks: [],
+              crm: {
+                enabled: false
+              }
+            }
+          },
+          analytics: {
+            totalConversations: 0,
+            activeConversations: 0,
+            completionRate: 0,
+            averageRating: 0,
+            lastActivity: new Date()
+          },
+          createdAt: new Date(serverBot.createdAt),
+          updatedAt: new Date(serverBot.updatedAt),
+          createdBy: serverBot.createdBy?.name || 'System',
+          isPublished: serverBot.isPublished || false,
+          version: '1.0.0'
+        }
+
+        dispatch(addBot(newBot))
+        toast.success(`${template.name} created successfully!`)
+        onClose()
+        if (onBotCreated) {
+          onBotCreated(serverBot.id)
+        }
+      } else {
+        toast.error('Failed to create bot: ' + response.data.error)
+      }
+    } catch (error: any) {
+      console.error('Error creating bot from template:', error)
+      toast.error('Failed to create bot: ' + (error.response?.data?.error || error.message))
     }
   }
 
-  const handleCustomBotCreate = () => {
+  const handleCustomBotCreate = async () => {
     if (!customBotName.trim()) {
       toast.error('Please enter a bot name')
       return
     }
 
-    const newBot = {
-      name: customBotName,
-      description: `Custom ${selectedType?.replace('_', ' ')} bot`,
-      type: selectedType || 'custom' as BotType,
-      status: 'draft' as const,
-      flow: {
-        id: `flow-${Date.now()}`,
-        name: 'Main Flow',
-        description: 'Primary conversation flow',
-        nodes: [
-          {
-            id: 'start',
-            type: 'message' as const,
-            position: { x: 100, y: 100 },
-            data: {
-              title: 'Welcome Message',
-              content: 'Hello! How can I help you today?'
-            }
-          }
-        ],
-        connections: []
-      },
-      settings: {
-        personality: {
-          tone: 'friendly' as const,
-          style: 'conversational' as const,
-          language: 'en'
-        },
-        behavior: {
-          responseDelay: 1000,
-          typingIndicator: true,
-          fallbackMessage: 'I didn\'t understand that. Can you rephrase?',
-          maxRetries: 3,
-          handoffTriggers: ['human', 'agent', 'speak to someone']
-        },
-        appearance: {
-          avatar: '',
-          name: customBotName,
-          welcomeMessage: 'Hello! How can I help you today?',
-          theme: {
-            primaryColor: '#3B82F6',
-            backgroundColor: '#FFFFFF',
-            textColor: '#1F2937'
-          }
-        },
-        integrations: {
-          platforms: ['website' as const],
-          webhooks: [],
-          crm: {
-            enabled: false
-          }
-        }
-      },
-      createdBy: '1',
-      isPublished: false,
-      version: '1.0.0'
-    }
+    try {
+      const botData = {
+        name: customBotName,
+        description: `Custom ${selectedType?.replace('_', ' ')} bot`,
+        type: selectedType || 'custom' as BotType
+      }
 
-    dispatch(addBot(newBot))
-    toast.success(`${customBotName} created successfully!`)
-    onClose()
-    if (onBotCreated) {
-      onBotCreated(Date.now().toString())
+      const response = await botsAPI.createBot(botData)
+      
+      if (response.data.success) {
+        // Update local Redux store with the bot from the server
+        const serverBot = response.data.bot
+        const newBot = {
+          id: serverBot.id,
+          name: serverBot.name,
+          description: serverBot.description,
+          type: serverBot.type,
+          status: serverBot.status,
+          flow: serverBot.flow || {
+            id: `flow-${Date.now()}`,
+            name: 'Main Flow',
+            description: 'Primary conversation flow',
+            nodes: [
+              {
+                id: 'start',
+                type: 'message' as const,
+                position: { x: 100, y: 100 },
+                data: {
+                  title: 'Welcome Message',
+                  content: 'Hello! How can I help you today?'
+                }
+              }
+            ],
+            connections: []
+          },
+          settings: serverBot.settings || {
+            personality: {
+              tone: 'friendly' as const,
+              style: 'conversational' as const,
+              language: 'en'
+            },
+            behavior: {
+              responseDelay: 1000,
+              typingIndicator: true,
+              fallbackMessage: 'I didn\'t understand that. Can you rephrase?',
+              maxRetries: 3,
+              handoffTriggers: ['human', 'agent', 'speak to someone']
+            },
+            appearance: {
+              avatar: '',
+              name: customBotName,
+              welcomeMessage: 'Hello! How can I help you today?',
+              theme: {
+                primaryColor: '#3B82F6',
+                backgroundColor: '#FFFFFF',
+                textColor: '#1F2937'
+              }
+            },
+            integrations: {
+              platforms: ['website' as const],
+              webhooks: [],
+              crm: {
+                enabled: false
+              }
+            }
+          },
+          analytics: {
+            totalConversations: 0,
+            activeConversations: 0,
+            completionRate: 0,
+            averageRating: 0,
+            lastActivity: new Date()
+          },
+          createdAt: new Date(serverBot.createdAt),
+          updatedAt: new Date(serverBot.updatedAt),
+          createdBy: serverBot.createdBy?.name || 'System',
+          isPublished: serverBot.isPublished || false,
+          version: '1.0.0'
+        }
+
+        dispatch(addBot(newBot))
+        toast.success(`${customBotName} created successfully!`)
+        onClose()
+        if (onBotCreated) {
+          onBotCreated(serverBot.id)
+        }
+      } else {
+        toast.error('Failed to create bot: ' + response.data.error)
+      }
+    } catch (error: any) {
+      console.error('Error creating custom bot:', error)
+      toast.error('Failed to create bot: ' + (error.response?.data?.error || error.message))
     }
   }
 

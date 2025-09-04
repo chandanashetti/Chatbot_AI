@@ -8,6 +8,9 @@ import {
   duplicateBot, 
   publishBot, 
   unpublishBot,
+  publishBotAsync,
+  unpublishBotAsync,
+  fetchBotsAsync,
   BotStatus,
   BotType 
 } from '../../store/slices/botSlice'
@@ -38,16 +41,45 @@ import toast from 'react-hot-toast'
 const BotManagement = () => {
   const dispatch = useDispatch()
   const navigate = useNavigate()
-  const { bots, filters } = useSelector((state: RootState) => state.bots)
+  const { bots, filters, isLoading, error } = useSelector((state: RootState) => state.bots)
   const [showCreateModal, setShowCreateModal] = useState(false)
 
   const [showDropdown, setShowDropdown] = useState<string | null>(null)
 
+  // Only fetch bots on initial mount
   useEffect(() => {
-    // Load bots from API in real implementation
-  }, [filters])
+    dispatch(fetchBotsAsync({}))
+  }, [dispatch])
 
-  const handleBotAction = (action: string, botId: string) => {
+  // Separate effect for filter changes with debouncing to prevent excessive API calls
+  useEffect(() => {
+    // Skip if bots are already loaded and this is just a filter change
+    // The filtering is done client-side in the filteredBots computation
+    const hasSearchFilter = filters.search && filters.search.length > 0
+    const hasTypeFilter = filters.type !== 'all'
+    const hasStatusFilter = filters.status !== 'all'
+    
+    // Only fetch from API if we have filters that might need server-side filtering
+    // For now, we'll do all filtering client-side to prevent refreshes
+    if (hasSearchFilter && filters.search.length > 2) {
+      const debounceTimer = setTimeout(() => {
+        dispatch(fetchBotsAsync({
+          search: filters.search || undefined
+        }))
+      }, 500) // 500ms debounce for search
+      
+      return () => clearTimeout(debounceTimer)
+    }
+  }, [dispatch, filters.search]) // Only depend on search, not all filters
+
+  // Show error toast if there's an API error
+  useEffect(() => {
+    if (error) {
+      toast.error(`Error: ${error}`)
+    }
+  }, [error])
+
+  const handleBotAction = async (action: string, botId: string) => {
     const bot = bots.find(b => b.id === botId)
     if (!bot) return
 
@@ -65,14 +97,22 @@ const BotManagement = () => {
           toast.success(`${bot.name} deleted successfully!`)
         }
         break
-      case 'publish':
-        dispatch(publishBot(botId))
-        toast.success(`${bot.name} published successfully!`)
-        break
-      case 'unpublish':
-        dispatch(unpublishBot(botId))
-        toast.success(`${bot.name} unpublished successfully!`)
-        break
+                case 'publish':
+            try {
+              await dispatch(publishBotAsync(botId)).unwrap()
+              toast.success(`${bot.name} published successfully!`)
+            } catch (error) {
+              toast.error(`Failed to publish ${bot.name}: ${error}`)
+            }
+            break
+          case 'unpublish':
+            try {
+              await dispatch(unpublishBotAsync(botId)).unwrap()
+              toast.success(`${bot.name} unpublished successfully!`)
+            } catch (error) {
+              toast.error(`Failed to unpublish ${bot.name}: ${error}`)
+            }
+            break
       case 'settings':
         navigate(`/admin/bots/${botId}/settings`)
         break
@@ -242,8 +282,16 @@ const BotManagement = () => {
       </div>
 
       {/* Bots Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-        {filteredBots.map((bot) => (
+      {isLoading ? (
+        <div className="flex items-center justify-center py-12">
+          <div className="flex items-center space-x-3">
+            <div className="w-8 h-8 border-4 border-primary-200 border-t-primary-600 rounded-full animate-spin"></div>
+            <span className="text-slate-600 dark:text-slate-400">Loading bots...</span>
+          </div>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+          {filteredBots.map((bot) => (
           <div key={bot.id} className="card p-6 hover-lift group relative">
             {/* Bot Avatar/Icon */}
             <div className="flex items-center justify-between mb-4">
@@ -366,13 +414,13 @@ const BotManagement = () => {
             {/* Toggle Switch */}
             <div className="flex items-center justify-between">
               <span className="text-sm text-slate-600 dark:text-slate-400">
-                {bot.status === 'active' ? 'Online' : 'Offline'}
+                {bot.isPublished && bot.status === 'active' ? 'Online' : 'Offline'}
               </span>
               <label className="relative inline-flex items-center cursor-pointer">
                 <input
                   type="checkbox"
-                  checked={bot.status === 'active'}
-                  onChange={() => handleBotAction(bot.status === 'active' ? 'unpublish' : 'publish', bot.id)}
+                  checked={bot.isPublished && bot.status === 'active'}
+                  onChange={() => handleBotAction((bot.isPublished && bot.status === 'active') ? 'unpublish' : 'publish', bot.id)}
                   className="sr-only peer"
                 />
                 <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-primary-300 dark:peer-focus:ring-primary-800 rounded-full peer dark:bg-slate-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-slate-600 peer-checked:bg-primary-600"></div>
@@ -385,10 +433,11 @@ const BotManagement = () => {
             </div>
           </div>
         ))}
-      </div>
+        </div>
+      )}
 
       {/* Empty State */}
-      {filteredBots.length === 0 && (
+      {!isLoading && filteredBots.length === 0 && (
         <div className="text-center py-12">
           <BotIcon className="w-12 h-12 text-slate-400 mx-auto mb-4" />
           <p className="text-slate-600 dark:text-slate-400 mb-4">

@@ -20,6 +20,7 @@ import Analytics from './pages/admin/Analytics'
 import AdminSettings from './pages/admin/Settings'
 import ThemeProvider from './components/providers/ThemeProvider'
 import GlobalChatWidget from './components/widgets/GlobalChatWidget'
+import AgentRoutes from './routes/agentRoutes'
 
 function App() {
   const { isAuthenticated } = useSelector((state: RootState) => state.auth)
@@ -52,6 +53,12 @@ function App() {
             <Route path="analytics" element={<Analytics />} />
             <Route path="settings" element={<AdminSettings />} />
           </Route>
+          
+          {/* Protected Agent Routes */}
+          <Route 
+            path="/agent/*" 
+            element={isAuthenticated ? <AgentRoutes /> : <Navigate to="/login" replace />}
+          />
           
           {/* Fallback */}
           <Route path="*" element={<Navigate to="/" replace />} />

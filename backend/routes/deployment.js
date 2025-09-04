@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const Bot = require('../models/Bot');
 const { v4: uuidv4 } = require('uuid');
+const { getOrCreateDefaultUser } = require('../utils/userHelper');
 
 // Middleware for bot ownership verification
 const verifyBotOwnership = async (req, res, next) => {
@@ -11,14 +12,23 @@ const verifyBotOwnership = async (req, res, next) => {
       return res.status(404).json({ error: 'Bot not found' });
     }
     
+    // Ensure we have a valid user ID
+    let userId = req.user?.id;
+    if (!userId) {
+      const defaultUser = await getOrCreateDefaultUser();
+      userId = defaultUser._id;
+      req.user = { id: userId, role: defaultUser.role };
+    }
+    
     // Check if user owns the bot or is in the team
-    if (bot.createdBy.toString() !== req.user?.id && !bot.team.includes(req.user?.id)) {
+    if (bot.createdBy.toString() !== userId.toString() && !bot.team?.includes(userId)) {
       return res.status(403).json({ error: 'Access denied' });
     }
     
     req.bot = bot;
     next();
   } catch (error) {
+    console.error('Bot ownership verification error:', error);
     res.status(500).json({ error: 'Server error', details: error.message });
   }
 };
@@ -41,6 +51,11 @@ router.post('/:botId/deploy', verifyBotOwnership, async (req, res) => {
     // Generate widget ID and API key if not exists
     if (!bot.deployment.widgetId) {
       bot.deployment.widgetId = require('crypto').randomBytes(16).toString('hex');
+    }
+    
+    // Store legacy ID if provided or generate a timestamp-based one
+    if (!bot.deployment.legacyId) {
+      bot.deployment.legacyId = Date.now().toString();
     }
     
     if (!bot.deployment.apiKey) {
@@ -67,6 +82,7 @@ router.post('/:botId/deploy', verifyBotOwnership, async (req, res) => {
         deployedAt: bot.deployment.deployedAt,
         domains: bot.deployment.domains,
         embedCode,
+        apiUrl: process.env.API_URL || 'http://localhost:5000',
         apiEndpoint: `${process.env.API_URL || 'http://localhost:5000'}/api/widget/${bot.deployment.widgetId}`
       }
     });
@@ -466,5 +482,160 @@ function getInstallationInstructions(type) {
 
   return instructions[type] || [];
 }
+
+// GET /api/deployment/:botId/test - Test widget endpoint (no auth required)
+router.get('/:botId/test', async (req, res) => {
+  try {
+    const { botId } = req.params;
+    
+    // Find bot by widget ID or MongoDB ID
+    const bot = await Bot.findOne({
+      $or: [
+        { 'deployment.widgetId': botId },
+        { _id: botId }
+      ]
+    });
+
+    if (!bot) {
+      return res.status(404).json({ error: 'Bot not found', botId });
+    }
+
+    if (!bot.deployment.isDeployed) {
+      return res.status(400).json({ error: 'Bot is not deployed yet' });
+    }
+
+    res.json({
+      success: true,
+      message: 'Bot is ready for widget integration',
+      botName: bot.name,
+      widgetId: bot.deployment.widgetId,
+      isDeployed: bot.deployment.isDeployed,
+      isPublished: bot.isPublished
+    });
+  } catch (error) {
+    console.error('Test widget error:', error);
+    res.status(500).json({ error: 'Failed to test widget', details: error.message });
+  }
+});
+
+// GET /api/deployment/:botId/embed - Get embed code for deployed bot
+router.get('/:botId/embed', verifyBotOwnership, async (req, res) => {
+  try {
+    const bot = req.bot;
+
+    if (!bot.deployment.isDeployed) {
+      return res.status(400).json({ error: 'Bot is not deployed yet' });
+    }
+
+    res.json({
+      success: true,
+      embedCode: bot.deployment.embedCode || bot.generateEmbedCode(),
+      widgetId: bot.deployment.widgetId,
+      apiUrl: process.env.API_URL || 'http://localhost:5000'
+    });
+  } catch (error) {
+    console.error('Get embed code error:', error);
+    res.status(500).json({ error: 'Failed to get embed code', details: error.message });
+  }
+});
+
+// GET /api/deployment/:botId/demo - Get HTML demo page for testing
+router.get('/:botId/demo', async (req, res) => {
+  try {
+    const { botId } = req.params;
+    
+    // Find bot by widget ID or MongoDB ID
+    const bot = await Bot.findOne({
+      $or: [
+        { 'deployment.widgetId': botId },
+        { _id: botId }
+      ]
+    });
+
+    if (!bot) {
+      return res.status(404).json({ error: 'Bot not found' });
+    }
+
+    if (!bot.deployment.isDeployed) {
+      return res.status(400).json({ error: 'Bot is not deployed yet' });
+    }
+
+    const apiUrl = process.env.API_URL || 'http://localhost:5000';
+    
+    const htmlDemo = `<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>${bot.name} - Chatbot Demo</title>
+    <style>
+        body {
+            font-family: system-ui, -apple-system, sans-serif;
+            margin: 0;
+            padding: 40px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            color: white;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: rgba(255, 255, 255, 0.1);
+            padding: 40px;
+            border-radius: 20px;
+            backdrop-filter: blur(10px);
+            box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+        }
+        h1 { text-align: center; margin-bottom: 30px; font-size: 2.5rem; }
+        .content { line-height: 1.8; font-size: 1.1rem; }
+        .highlight {
+            background: rgba(255, 255, 255, 0.2);
+            padding: 20px;
+            border-radius: 10px;
+            margin: 20px 0;
+        }
+        code {
+            background: rgba(0, 0, 0, 0.3);
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-family: 'Courier New', monospace;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🤖 ${bot.name}</h1>
+        
+        <div class="content">
+            <p>Welcome to the ${bot.name} demo! This bot is ready for integration.</p>
+            
+            <div class="highlight">
+                <h3>🔍 Debug Information:</h3>
+                <p><strong>Bot ID:</strong> <code>${bot._id}</code></p>
+                <p><strong>Widget ID:</strong> <code>${bot.deployment.widgetId}</code></p>
+                <p><strong>API URL:</strong> <code>${apiUrl}</code></p>
+                <p><strong>Status:</strong> ${bot.isPublished ? '✅ Published' : '❌ Not Published'} | ${bot.deployment.isDeployed ? '✅ Deployed' : '❌ Not Deployed'}</p>
+            </div>
+            
+            <p>Look for the chat bubble in the bottom-right corner. Click it to start chatting!</p>
+            
+            <div class="highlight">
+                <h3>📋 Your embed code:</h3>
+                <pre style="background: rgba(0,0,0,0.3); padding: 15px; border-radius: 8px; overflow-x: auto; font-size: 12px;">${bot.generateEmbedCode().replace(/</g, '&lt;').replace(/>/g, '&gt;')}</pre>
+            </div>
+        </div>
+    </div>
+
+    ${bot.generateEmbedCode()}
+</body>
+</html>`;
+
+    res.setHeader('Content-Type', 'text/html');
+    res.send(htmlDemo);
+  } catch (error) {
+    console.error('Generate demo error:', error);
+    res.status(500).json({ error: 'Failed to generate demo', details: error.message });
+  }
+});
 
 module.exports = router;

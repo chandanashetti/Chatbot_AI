@@ -1,5 +1,14 @@
 (function() {
   'use strict';
+  
+  // Prevent multiple widget instances
+  if (window.ChatbotWidget) {
+    console.log('Chatbot widget already initialized');
+    return;
+  }
+  
+  // Mark widget as loaded
+  window.ChatbotWidget = { loaded: true };
 
   // Widget configuration
   let config = {
@@ -56,7 +65,7 @@
     }
 
     if (!widgetScript) {
-      console.error('ChatBot: Widget script not found');
+      console.error('ChatBot: Widget script not found. Make sure you include the data-bot-id attribute in your script tag.');
       return;
     }
 
@@ -78,7 +87,8 @@
     }
 
     if (!config.botId || !config.apiUrl) {
-      console.error('ChatBot: Missing required configuration');
+      console.error('ChatBot: Missing required configuration. Please provide data-bot-id and data-api-url attributes.');
+      console.log('Current config:', { botId: config.botId, apiUrl: config.apiUrl });
       return;
     }
 
@@ -88,25 +98,34 @@
         createSession();
         createWidgetHTML();
         attachEventListeners();
+        console.log('ChatBot: Widget initialized successfully');
       })
       .catch(error => {
         console.error('ChatBot: Failed to initialize widget', error);
+        // Still create widget with default config
+        createWidgetHTML();
+        attachEventListeners();
       });
   }
 
   // Load widget configuration from API
   async function loadWidgetConfig() {
     try {
+      console.log(`ChatBot: Loading configuration from ${config.apiUrl}/api/widget/${config.botId}/config`);
+      
       const response = await fetch(`${config.apiUrl}/api/widget/${config.botId}/config`);
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}: ${response.statusText}`);
       }
       
       const widgetConfig = await response.json();
+      console.log('ChatBot: Configuration loaded successfully', widgetConfig);
+      
       config = { ...config, ...widgetConfig };
     } catch (error) {
       console.error('ChatBot: Failed to load configuration', error);
-      throw error;
+      console.log('ChatBot: Using default configuration');
+      // Continue with default config instead of throwing
     }
   }
 

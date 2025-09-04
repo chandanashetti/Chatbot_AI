@@ -3,6 +3,13 @@ const router = express.Router();
 const Bot = require('../models/Bot');
 const BotRuntime = require('../services/botRuntime');
 const { v4: uuidv4 } = require('uuid');
+const crypto = require('crypto');
+
+// Helper function to validate widget ID format
+const isValidWidgetId = (widgetId) => {
+  // Accept both numeric IDs and hex strings
+  return /^\d+$/.test(widgetId) || /^[a-f0-9]{32}$/.test(widgetId);
+};
 
 // Rate limiting middleware
 const rateLimit = require('express-rate-limit');
@@ -21,7 +28,19 @@ const verifyWidgetAccess = async (req, res, next) => {
     const { widgetId } = req.params;
     const origin = req.get('Origin') || req.get('Referer');
     
-    const bot = await Bot.findByWidgetId(widgetId);
+    // Validate widget ID format
+    if (!isValidWidgetId(widgetId)) {
+      return res.status(400).json({ error: 'Invalid widget ID format' });
+    }
+    
+    // Try to find the bot by widget ID or by ID
+    const bot = await Bot.findOne({
+      $or: [
+        { 'deployment.widgetId': widgetId },
+        { _id: widgetId }
+      ]
+    });
+    
     if (!bot) {
       return res.status(404).json({ error: 'Widget not found' });
     }

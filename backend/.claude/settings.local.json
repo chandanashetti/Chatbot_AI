@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(/D:\\projects\\Chatbot_AI\\backend/**)",
+      "Read(/D:\\projects\\Chatbot_AI\\backend/**)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

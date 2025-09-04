@@ -96,11 +96,19 @@ export const usePermissions = (): PermissionCheck => {
       'chat.moderate': ['superadmin', 'admin', 'manager'],
       'chat.export': ['superadmin', 'admin', 'manager'],
       
-      // Agent management
+      // Agent management (Admin view)
       'agents': ['superadmin', 'admin'],
       'agents.create': ['superadmin', 'admin'],
       'agents.edit': ['superadmin', 'admin'],
       'agents.delete': ['superadmin', 'admin'],
+      
+      // Agent dashboard and chat (Agent view)
+      'agent:view': ['superadmin', 'admin', 'agent'],
+      'agent:chat': ['superadmin', 'admin', 'agent'],
+      'agent:manage': ['superadmin', 'admin'],
+      'agent:handoff': ['superadmin', 'admin', 'agent'],
+      'agent:escalate': ['superadmin', 'admin', 'agent'],
+      'agent:notes': ['superadmin', 'admin', 'agent'],
       
       // Chat review
       'chatReview': ['superadmin', 'admin', 'manager'],

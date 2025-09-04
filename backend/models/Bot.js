@@ -48,6 +48,14 @@ const botConnectionSchema = new mongoose.Schema({
 const botFlowSchema = new mongoose.Schema({
   id: { type: String, required: true },
   name: { type: String, required: true },
+  deployment: {
+    widgetId: { type: String, unique: true, sparse: true },
+    apiKey: { type: String },
+    platforms: [String],
+    domains: [String],
+    customCSS: String,
+    status: { type: String, enum: ['draft', 'deployed', 'paused'], default: 'draft' }
+  },
   description: String,
   nodes: [botNodeSchema],
   connections: [botConnectionSchema],
@@ -242,19 +250,41 @@ botSchema.pre('save', function(next) {
 // Instance methods
 botSchema.methods.generateEmbedCode = function() {
   const widgetId = this.deployment.widgetId;
-  const baseUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
+  const apiUrl = process.env.API_URL || 'http://localhost:5000';
   
   const embedCode = `<!-- Chatbot Widget -->
 <script>
   (function() {
+    // Check if widget is already loaded
+    if (window.ChatbotWidget) {
+      console.log('Chatbot widget already loaded');
+      return;
+    }
+    
+    // Create and load widget script
     var chatbot = document.createElement('script');
     chatbot.type = 'text/javascript';
     chatbot.async = true;
-    chatbot.src = '${baseUrl}/widget.js';
+    chatbot.src = '${apiUrl}/widget.js';
     chatbot.setAttribute('data-bot-id', '${widgetId}');
-    chatbot.setAttribute('data-api-url', '${process.env.API_URL || 'http://localhost:5000'}');
+    chatbot.setAttribute('data-api-url', '${apiUrl}');
+    
+    // Add error handling
+    chatbot.onerror = function() {
+      console.error('Failed to load chatbot widget from ${apiUrl}/widget.js');
+    };
+    
+    chatbot.onload = function() {
+      console.log('Chatbot widget loaded successfully');
+    };
+    
+    // Insert script
     var s = document.getElementsByTagName('script')[0];
-    s.parentNode.insertBefore(chatbot, s);
+    if (s && s.parentNode) {
+      s.parentNode.insertBefore(chatbot, s);
+    } else {
+      document.head.appendChild(chatbot);
+    }
   })();
 </script>
 <!-- End Chatbot Widget -->`;

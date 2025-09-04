@@ -33,14 +33,53 @@ api.interceptors.response.use(
   }
 )
 
-// Auth API
+// Authentication API (comprehensive)
 export const authAPI = {
-  login: (credentials: { email: string; password: string }) =>
-    api.post('/auth/login', credentials),
-  
+  // User registration
+  register: (userData: {
+    email: string;
+    password: string;
+    firstName: string;
+    lastName: string;
+    username?: string;
+  }) => api.post('/auth/register', userData),
+
+  // User login
+  login: (credentials: {
+    email: string;
+    password: string;
+    rememberMe?: boolean;
+  }) => api.post('/auth/login', credentials),
+
+  // User logout
   logout: () => api.post('/auth/logout'),
-  
-  getProfile: () => api.get('/auth/profile'),
+
+  // Forgot password
+  forgotPassword: (email: string) => api.post('/auth/forgot-password', { email }),
+
+  // Reset password
+  resetPassword: (data: {
+    token: string;
+    password: string;
+  }) => api.post('/auth/reset-password', data),
+
+  // Verify email
+  verifyEmail: (token: string) => api.post('/auth/verify-email', { token }),
+
+  // Change password (authenticated user)
+  changePassword: (data: {
+    currentPassword: string;
+    newPassword: string;
+  }) => api.post('/auth/change-password', data),
+
+  // Get current user profile
+  getProfile: () => api.get('/auth/me'),
+
+  // Update current user profile
+  updateProfile: (data: {
+    profile?: any;
+    preferences?: any;
+  }) => api.put('/auth/profile', data),
 }
 
 // Chat API
@@ -146,6 +185,113 @@ export const analyticsAPI = {
     api.get('/analytics/metrics', { params: dateRange }),
 }
 
+// Agent Management API
+export const agentAPI = {
+  // Get all agents with filtering
+  getAgents: (params?: {
+    status?: string;
+    department?: string;
+    skills?: string[];
+    availability?: string;
+    search?: string;
+    page?: number;
+    limit?: number;
+  }) => api.get('/agents', { params }),
+
+  // Get available agents for handoff
+  getAvailableAgents: (params?: {
+    skills?: string[];
+    departments?: string[];
+    languages?: string[];
+    priority?: string;
+  }) => api.get('/agents/available', { params }),
+
+  // Get specific agent
+  getAgent: (id: string) => api.get(`/agents/${id}`),
+
+  // Create new agent
+  createAgent: (agentData: any) => api.post('/agents', agentData),
+
+  // Update agent
+  updateAgent: (id: string, agentData: any) => api.put(`/agents/${id}`, agentData),
+
+  // Update agent status
+  updateAgentStatus: (id: string, status: string) =>
+    api.patch(`/agents/${id}/status`, { status }),
+
+  // Update agent availability
+  updateAgentAvailability: (id: string, availability: {
+    isOnline?: boolean;
+    maxConcurrentChats?: number;
+  }) => api.patch(`/agents/${id}/availability`, availability),
+
+  // Deactivate agent
+  deactivateAgent: (id: string) => api.delete(`/agents/${id}`),
+
+  // Get agent statistics
+  getAgentStats: (id: string, period?: string) =>
+    api.get(`/agents/${id}/stats`, { params: { period } }),
+
+  // Get dashboard summary
+  getDashboardSummary: () => api.get('/agents/dashboard/summary'),
+}
+
+// Handoff Management API
+export const handoffAPI = {
+  // Get all handoff requests with filtering
+  getHandoffs: (params?: {
+    status?: string;
+    priority?: string;
+    category?: string;
+    agentId?: string;
+    platform?: string;
+    search?: string;
+    page?: number;
+    limit?: number;
+  }) => api.get('/handoffs', { params }),
+
+  // Get handoff queue
+  getQueue: (params?: {
+    skills?: string[];
+    departments?: string[];
+    languages?: string[];
+  }) => api.get('/handoffs/queue', { params }),
+
+  // Get specific handoff request
+  getHandoff: (id: string) => api.get(`/handoffs/${id}`),
+
+  // Create new handoff request
+  createHandoff: (handoffData: any) => api.post('/handoffs', handoffData),
+
+  // Assign handoff to agent
+  assignHandoff: (id: string, agentId: string) =>
+    api.post(`/handoffs/${id}/assign`, { agentId }),
+
+  // Agent accepts handoff
+  acceptHandoff: (id: string, agentId: string) =>
+    api.post(`/handoffs/${id}/accept`, { agentId }),
+
+  // Agent declines handoff
+  declineHandoff: (id: string, agentId: string, reason?: string) =>
+    api.post(`/handoffs/${id}/decline`, { agentId, reason }),
+
+  // Complete handoff
+  completeHandoff: (id: string, agentId: string, resolution?: any) =>
+    api.post(`/handoffs/${id}/complete`, { agentId, resolution }),
+
+  // Escalate handoff
+  escalateHandoff: (id: string, reason: string, escalatedBy?: string) =>
+    api.post(`/handoffs/${id}/escalate`, { reason, escalatedBy }),
+
+  // Add note to handoff
+  addNote: (id: string, content: string, author?: string, isInternal?: boolean) =>
+    api.post(`/handoffs/${id}/notes`, { content, author, isInternal }),
+
+  // Get handoff statistics
+  getStats: (period?: string) =>
+    api.get('/handoffs/stats/summary', { params: { period } }),
+}
+
 // Users API
 export const usersAPI = {
   getUsers: (params: {
@@ -234,9 +380,9 @@ export const botsAPI = {
   
   duplicateBot: (id: string) => api.post(`/bots/${id}/duplicate`),
   
-  publishBot: (id: string) => api.patch(`/bots/${id}/publish`),
+  publishBot: (id: string) => api.post(`/bots/${id}/publish`),
   
-  unpublishBot: (id: string) => api.patch(`/bots/${id}/unpublish`),
+  unpublishBot: (id: string) => api.post(`/bots/${id}/unpublish`),
   
   updateBotFlow: (id: string, flow: any) => api.put(`/bots/${id}/flow`, flow),
   
@@ -409,5 +555,87 @@ export const reactionsAPI = {
   // Get reaction analytics
   getAnalytics: () => api.get('/messages/reactions/analytics'),
 }
+
+// User Management API
+export const userAPI = {
+  // Get all users with filtering and pagination
+  getUsers: (params?: {
+    page?: number;
+    limit?: number;
+    search?: string;
+    status?: string;
+    role?: string;
+    department?: string;
+    sortBy?: string;
+    sortOrder?: 'asc' | 'desc';
+  }) => api.get('/users', { params }),
+
+  // Get user statistics
+  getUserStats: () => api.get('/users/stats'),
+
+  // Search users
+  searchUsers: (query: string, limit?: number) => 
+    api.get('/users/search', { params: { q: query, limit } }),
+
+  // Get user by ID
+  getUser: (id: string) => api.get(`/users/${id}`),
+
+  // Create new user
+  createUser: (userData: {
+    email: string;
+    username?: string;
+    password?: string;
+    role: string;
+    profile: {
+      firstName: string;
+      lastName: string;
+      phone?: string;
+      department?: string;
+      jobTitle?: string;
+      manager?: string;
+      timezone?: string;
+      language?: string;
+    };
+    permissions?: any;
+    preferences?: any;
+    sendInvite?: boolean;
+  }) => api.post('/users', userData),
+
+  // Update user
+  updateUser: (id: string, userData: any) => api.put(`/users/${id}`, userData),
+
+  // Update user status
+  updateUserStatus: (id: string, status: string) => 
+    api.patch(`/users/${id}/status`, { status }),
+
+  // Update user password
+  updateUserPassword: (id: string, data: {
+    newPassword: string;
+    currentPassword?: string;
+    forceChange?: boolean;
+  }) => api.patch(`/users/${id}/password`, data),
+
+  // Upload user avatar
+  uploadAvatar: (id: string, file: File) => {
+    const formData = new FormData();
+    formData.append('avatar', file);
+    return api.post(`/users/${id}/avatar`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' }
+    });
+  },
+
+  // Resend user invitation
+  resendInvitation: (id: string) => api.post(`/users/${id}/resend-invitation`),
+
+  // Delete user (soft delete)
+  deleteUser: (id: string) => api.delete(`/users/${id}`),
+
+  // Restore deleted user
+  restoreUser: (id: string) => api.post(`/users/${id}/restore`),
+
+  // Get available roles
+  getRoles: () => api.get('/users/roles/list'),
+}
+
 
 export default api

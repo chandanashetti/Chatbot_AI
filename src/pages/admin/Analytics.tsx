@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useCallback } from 'react'
 import { useSelector, useDispatch } from 'react-redux'
 import { RootState } from '../../store/store'
 import { setData, setDateRange, setLoading } from '../../store/slices/analyticsSlice'
@@ -32,7 +32,7 @@ import {
 
 const Analytics = () => {
   const dispatch = useDispatch()
-  const { dateRange } = useSelector((state: RootState) => state.analytics)
+  const { data, isLoading, error, dateRange } = useSelector((state: RootState) => state.analytics)
 
   // Mock data for demo
   const mockData = {
@@ -67,25 +67,42 @@ const Analytics = () => {
     ]
   }
 
-  useEffect(() => {
-    loadAnalytics()
+  // Debounced version of loadAnalytics
+  const debouncedLoadAnalytics = useCallback(() => {
+    const timeoutId = setTimeout(() => {
+      loadAnalytics()
+    }, 500) // 500ms debounce
+
+    return () => clearTimeout(timeoutId)
   }, [dateRange])
+
+  useEffect(() => {
+    const cleanup = debouncedLoadAnalytics()
+    return cleanup
+  }, [debouncedLoadAnalytics])
 
   const loadAnalytics = async () => {
     dispatch(setLoading(true))
     try {
+      console.log('🔄 Loading analytics with date range:', dateRange)
       const [dashboardResponse, chartsResponse] = await Promise.all([
         analyticsAPI.getDashboard(dateRange),
         analyticsAPI.getCharts(dateRange)
       ])
       
-      dispatch(setData({
+      console.log('📊 Dashboard response:', dashboardResponse.data)
+      console.log('📈 Charts response:', chartsResponse.data)
+      
+      const combinedData = {
         ...dashboardResponse.data,
         ...chartsResponse.data
-      }))
+      }
+      
+      console.log('✅ Combined analytics data:', combinedData)
+      dispatch(setData(combinedData))
     } catch (error) {
-      console.error('Failed to load analytics:', error)
-      // Use mock data for demo
+      console.error('❌ Failed to load analytics:', error)
+      console.log('🔄 Falling back to mock data')
       dispatch(setData(mockData))
     } finally {
       dispatch(setLoading(false))
@@ -96,15 +113,43 @@ const Analytics = () => {
     dispatch(setDateRange({ ...dateRange, [field]: value }))
   }
 
+  const setQuickDateRange = (period: 'today' | 'week' | 'month' | 'quarter') => {
+    const end = new Date()
+    let start = new Date()
+
+    switch (period) {
+      case 'today':
+        start = new Date()
+        break
+      case 'week':
+        start.setDate(end.getDate() - 7)
+        break
+      case 'month':
+        start.setDate(end.getDate() - 30)
+        break
+      case 'quarter':
+        start.setDate(end.getDate() - 90)
+        break
+    }
+
+    dispatch(setDateRange({
+      start: start.toISOString().split('T')[0],
+      end: end.toISOString().split('T')[0]
+    }))
+  }
+
+  // Use real data from Redux store, fallback to mock data if not available
+  const analyticsData = data || mockData
+
   const channelData = [
-    { name: 'Web Chat', value: mockData.queriesByChannel.web, color: '#3b82f6' },
-    { name: 'WhatsApp', value: mockData.queriesByChannel.whatsapp, color: '#10b981' },
-    { name: 'Instagram', value: mockData.queriesByChannel.instagram, color: '#f59e0b' }
+    { name: 'Web Chat', value: analyticsData.queriesByChannel?.web || 0, color: '#3b82f6' },
+    { name: 'WhatsApp', value: analyticsData.queriesByChannel?.whatsapp || 0, color: '#10b981' },
+    { name: 'Instagram', value: analyticsData.queriesByChannel?.instagram || 0, color: '#f59e0b' }
   ]
 
   const feedbackData = [
-    { name: 'Positive', value: mockData.positiveFeedback, color: '#10b981' },
-    { name: 'Negative', value: mockData.negativeFeedback, color: '#ef4444' }
+    { name: 'Positive', value: analyticsData.positiveFeedback || 0, color: '#10b981' },
+    { name: 'Negative', value: analyticsData.negativeFeedback || 0, color: '#ef4444' }
   ]
 
   const formatDate = (dateString: string) => {
@@ -112,6 +157,29 @@ const Analytics = () => {
       month: 'short', 
       day: 'numeric' 
     })
+  }
+
+  // Show loading state
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-blue-600"></div>
+      </div>
+    )
+  }
+
+  // Show error state
+  if (error) {
+    return (
+      <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-6">
+        <div className="flex items-center">
+          <div className="text-red-600 dark:text-red-400">
+            <h3 className="text-lg font-medium">Error loading analytics</h3>
+            <p className="text-sm mt-1">{error}</p>
+          </div>
+        </div>
+      </div>
+    )
   }
 
   return (
@@ -125,6 +193,11 @@ const Analytics = () => {
           <p className="text-gray-600 dark:text-gray-400">
             Monitor your chatbot performance and insights
           </p>
+          {dateRange.start && dateRange.end && (
+            <p className="text-sm text-blue-600 dark:text-blue-400 mt-1">
+              Showing data from {new Date(dateRange.start).toLocaleDateString()} to {new Date(dateRange.end).toLocaleDateString()}
+            </p>
+          )}
         </div>
         
         <div className="flex items-center space-x-2">
@@ -135,27 +208,85 @@ const Analytics = () => {
         </div>
       </div>
 
-      {/* Date Range Selector */}
+      {/* Filters */}
       <div className="card p-6">
-        <div className="flex items-center space-x-4">
-          <Calendar className="w-5 h-5 text-gray-500" />
+        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between space-y-4 lg:space-y-0">
+          {/* Date Range Selector */}
+          <div className="flex items-center space-x-4">
+            <Calendar className="w-5 h-5 text-gray-500" />
+            <div className="flex items-center space-x-2">
+              <input
+                type="date"
+                value={dateRange.start}
+                onChange={(e) => handleDateRangeChange('start', e.target.value)}
+                className="input-field"
+              />
+              <span className="text-gray-500">to</span>
+              <input
+                type="date"
+                value={dateRange.end}
+                onChange={(e) => handleDateRangeChange('end', e.target.value)}
+                className="input-field"
+              />
+            </div>
+          </div>
+
+          {/* Quick Date Filters */}
           <div className="flex items-center space-x-2">
-            <input
-              type="date"
-              value={dateRange.start}
-              onChange={(e) => handleDateRangeChange('start', e.target.value)}
-              className="input-field"
-            />
-            <span className="text-gray-500">to</span>
-            <input
-              type="date"
-              value={dateRange.end}
-              onChange={(e) => handleDateRangeChange('end', e.target.value)}
-              className="input-field"
-            />
+            <span className="text-sm text-gray-600 dark:text-gray-400">Quick filters:</span>
+            <button
+              onClick={() => setQuickDateRange('today')}
+              className="px-3 py-1 text-xs bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-md transition-colors"
+            >
+              Today
+            </button>
+            <button
+              onClick={() => setQuickDateRange('week')}
+              className="px-3 py-1 text-xs bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-md transition-colors"
+            >
+              Last 7 days
+            </button>
+            <button
+              onClick={() => setQuickDateRange('month')}
+              className="px-3 py-1 text-xs bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-md transition-colors"
+            >
+              Last 30 days
+            </button>
+            <button
+              onClick={() => setQuickDateRange('quarter')}
+              className="px-3 py-1 text-xs bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-md transition-colors"
+            >
+              Last 90 days
+            </button>
+          </div>
+
+          {/* Refresh Button */}
+          <div className="flex items-center space-x-2">
+            <button
+              onClick={loadAnalytics}
+              disabled={isLoading}
+              className="flex items-center space-x-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white rounded-lg transition-colors"
+            >
+              {isLoading ? (
+                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+              ) : (
+                <Calendar className="w-4 h-4" />
+              )}
+              <span className="text-sm">{isLoading ? 'Loading...' : 'Refresh'}</span>
+            </button>
           </div>
         </div>
       </div>
+
+      {/* Data Status Indicator */}
+      {isLoading && (
+        <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
+          <div className="flex items-center space-x-2">
+            <div className="w-4 h-4 border-2 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
+            <span className="text-blue-700 dark:text-blue-300 text-sm">Loading analytics data...</span>
+          </div>
+        </div>
+      )}
 
       {/* Key Metrics */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
@@ -166,7 +297,7 @@ const Analytics = () => {
                 Total Queries
               </p>
               <p className="text-2xl font-bold text-gray-900 dark:text-white">
-                {mockData.totalQueries.toLocaleString()}
+                {(analyticsData.totalQueries || 0).toLocaleString()}
               </p>
             </div>
             <TrendingUp className="w-8 h-8 text-green-500" />
@@ -184,7 +315,7 @@ const Analytics = () => {
                 Avg Response Time
               </p>
               <p className="text-2xl font-bold text-gray-900 dark:text-white">
-                {mockData.averageResponseTime}s
+                {analyticsData.averageResponseTime || 0}s
               </p>
             </div>
             <TrendingDown className="w-8 h-8 text-blue-500" />
@@ -202,7 +333,7 @@ const Analytics = () => {
                 Deflection Rate
               </p>
               <p className="text-2xl font-bold text-gray-900 dark:text-white">
-                {mockData.deflectionRate}%
+                {analyticsData.deflectionRate || 0}%
               </p>
             </div>
             <TrendingUp className="w-8 h-8 text-purple-500" />
@@ -220,7 +351,7 @@ const Analytics = () => {
                 System Uptime
               </p>
               <p className="text-2xl font-bold text-gray-900 dark:text-white">
-                {mockData.uptime}%
+                {analyticsData.uptime || 0}%
               </p>
             </div>
             <div className="w-8 h-8 bg-green-100 dark:bg-green-900/20 rounded-full flex items-center justify-center">
@@ -244,7 +375,7 @@ const Analytics = () => {
             <BarChart3 className="w-5 h-5 text-gray-500" />
           </div>
           <ResponsiveContainer width="100%" height={300}>
-            <LineChart data={mockData.queriesByDate}>
+            <LineChart data={analyticsData.queriesByDate || []}>
               <CartesianGrid strokeDasharray="3 3" />
               <XAxis 
                 dataKey="date" 
@@ -276,7 +407,7 @@ const Analytics = () => {
             <BarChart3 className="w-5 h-5 text-gray-500" />
           </div>
           <ResponsiveContainer width="100%" height={300}>
-            <AreaChart data={mockData.responseTimeByDate}>
+            <AreaChart data={analyticsData.responseTimeByDate || []}>
               <CartesianGrid strokeDasharray="3 3" />
               <XAxis 
                 dataKey="date" 
@@ -356,7 +487,7 @@ const Analytics = () => {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           <div className="text-center">
             <div className="text-3xl font-bold text-gray-900 dark:text-white mb-2">
-              {mockData.positiveFeedback}
+              {analyticsData.positiveFeedback || 0}
             </div>
             <div className="text-sm text-gray-600 dark:text-gray-400">
               Positive Feedback
@@ -364,7 +495,7 @@ const Analytics = () => {
           </div>
           <div className="text-center">
             <div className="text-3xl font-bold text-gray-900 dark:text-white mb-2">
-              {mockData.negativeFeedback}
+              {analyticsData.negativeFeedback || 0}
             </div>
             <div className="text-sm text-gray-600 dark:text-gray-400">
               Negative Feedback
@@ -372,7 +503,12 @@ const Analytics = () => {
           </div>
           <div className="text-center">
             <div className="text-3xl font-bold text-gray-900 dark:text-white mb-2">
-              {((mockData.positiveFeedback / (mockData.positiveFeedback + mockData.negativeFeedback)) * 100).toFixed(1)}%
+              {(() => {
+                const positive = analyticsData.positiveFeedback || 0;
+                const negative = analyticsData.negativeFeedback || 0;
+                const total = positive + negative;
+                return total > 0 ? ((positive / total) * 100).toFixed(1) : '0.0';
+              })()}%
             </div>
             <div className="text-sm text-gray-600 dark:text-gray-400">
               Satisfaction Rate

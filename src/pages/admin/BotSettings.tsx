@@ -222,9 +222,10 @@ const BotSettings = () => {
     const embedCode = `<script>
   (function() {
     var chatWidget = document.createElement('script');
-    chatWidget.src = '${window.location.origin}/widget.js';
+    chatWidget.src = 'http://localhost:5000/public/widget.js';
     chatWidget.async = true;
     chatWidget.setAttribute('data-bot-id', '${botId}');
+    chatWidget.setAttribute('data-api-url', 'http://localhost:5000');
     chatWidget.setAttribute('data-config', '${JSON.stringify(settings).replace(/"/g, '&quot;')}');
     document.head.appendChild(chatWidget);
   })();

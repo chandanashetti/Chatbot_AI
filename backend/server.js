@@ -59,6 +59,14 @@ const mammoth = require('mammoth');
 const csv = require('csv-parser');
 
 const app = express();
+
+// Middleware
+app.use(cors());
+app.use(express.json());
+
+// Serve static files from public directory (including widget.js)
+app.use('/public', express.static(path.join(__dirname, 'public')));
+
 const server = createServer(app);
 const io = new Server(server, {
   cors: {
@@ -67,10 +75,6 @@ const io = new Server(server, {
   }
 });
 const PORT = process.env.PORT || 5000;
-
-// Middleware
-app.use(cors());
-app.use(express.json());
 
 // Message Reaction Routes
 app.post('/api/messages/:messageId/reaction', async (req, res) => {
@@ -1392,30 +1396,47 @@ app.get('/api/settings/models', (req, res) => {
 const botRoutes = require('./routes/bots');
 const widgetRoutes = require('./routes/widget');
 const deploymentRoutes = require('./routes/deployment');
-
-// Middleware for authentication (placeholder - implement proper auth)
-const authenticateUser = (req, res, next) => {
-  // For development, use a default user
-  req.user = { id: '1', role: 'admin' };
-  next();
-};
+const { ensureUser } = require('./utils/userHelper');
 
 // Apply routes
-app.use('/api/bots', authenticateUser, botRoutes);
-app.use('/api/widget', widgetRoutes);
-app.use('/api/deployment', authenticateUser, deploymentRoutes);
+const analyticsRoutes = require('./routes/analytics');
+const agentRoutes = require('./routes/agents');
+const handoffRoutes = require('./routes/handoffs');
+const authRoutes = require('./routes/auth');
+const userRoutes = require('./routes/users');
 
-// Serve widget static files
-app.use('/widget.js', express.static(path.join(__dirname, 'public/widget.js')));
+// Public routes (no authentication required)
+app.use('/api/auth', authRoutes);
+
+// Protected routes (authentication required)
+app.use('/api/users', ensureUser, userRoutes);
+app.use('/api/bots', ensureUser, botRoutes);
+app.use('/api/widget', widgetRoutes);
+app.use('/api/deployment', ensureUser, deploymentRoutes);
+app.use('/api/analytics', ensureUser, analyticsRoutes);
+app.use('/api/agents', ensureUser, agentRoutes);
+app.use('/api/handoffs', ensureUser, handoffRoutes);
+
+// Serve widget static files with proper headers
+app.use(express.static(path.join(__dirname, 'public')));
+
+// Serve widget.js with proper CORS headers
+app.get('/widget.js', (req, res) => {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  res.setHeader('Content-Type', 'application/javascript');
+  res.sendFile(path.join(__dirname, 'public', 'widget.js'));
+});
 
 // Error handling middleware
-app.use((error, req, res, next) => {
-  console.error('Server error:', error);
-  res.status(500).json({
-    error: 'Internal server error',
-    details: error.message
-  });
-});
+const { errorHandler, notFoundHandler } = require('./middleware/errorHandler');
+
+// 404 handler for unmatched routes
+app.use(notFoundHandler);
+
+// Global error handler
+app.use(errorHandler);
 
 // Web Scraping API endpoints
 const webScraper = new WebScraper();
@@ -1628,9 +1649,14 @@ app.post('/api/web-scraping/search', async (req, res) => {
 server.listen(PORT, () => {
   console.log(`🚀 Backend server running on port ${PORT}`);
   console.log(`\n📋 API Endpoints:`);
+  console.log(`  🔐 Authentication: http://localhost:${PORT}/api/auth`);
+  console.log(`  👥 User Management: http://localhost:${PORT}/api/users`);
   console.log(`  🤖 Bot Management: http://localhost:${PORT}/api/bots`);
   console.log(`  💬 Widget API: http://localhost:${PORT}/api/widget`);
   console.log(`  🚀 Deployment: http://localhost:${PORT}/api/deployment`);
+  console.log(`  📊 Analytics: http://localhost:${PORT}/api/analytics`);
+  console.log(`  🧑‍💼 Agent Management: http://localhost:${PORT}/api/agents`);
+  console.log(`  🔄 Handoff Requests: http://localhost:${PORT}/api/handoffs`);
   console.log(`  📚 Knowledge Base: http://localhost:${PORT}/api/knowledge-base`);
   console.log(`  🧠 RAG API: http://localhost:${PORT}/api/rag`);
   console.log(`  🤖 OpenAI API: http://localhost:${PORT}/api/openai`);

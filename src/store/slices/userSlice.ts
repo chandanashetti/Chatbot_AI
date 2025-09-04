@@ -1,6 +1,6 @@
 import { createSlice, PayloadAction } from '@reduxjs/toolkit'
 
-export type UserRole = 'superadmin' | 'admin' | 'manager' | 'operator' | 'viewer'
+export type UserRole = 'superadmin' | 'admin' | 'manager' | 'operator' | 'viewer' | 'agent'
 export type UserStatus = 'active' | 'inactive' | 'pending' | 'suspended'
 
 export interface Permission {
