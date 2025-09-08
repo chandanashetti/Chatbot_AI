@@ -1347,6 +1347,224 @@ app.use(notFoundHandler);
 app.use(errorHandler);
 
 // Web scraping endpoints are now handled in routes/webScraping.js
+// Import Discord service
+const discordBot = require('./services/discordBot');
+const DiscordMessage = require('./models/DiscordMessage');
+const DiscordSettings = require('./models/DiscordSettings');
+
+// Discord Bot Routes
+
+// Initialize Discord bot
+app.post('/api/discord/connect', async (req, res) => {
+  try {
+    const { token } = req.body;
+    
+    if (!token) {
+      return res.status(400).json({ error: 'Bot token is required' });
+    }
+    
+    const success = await discordBot.login(token);
+    
+    if (success) {
+      // Store token in settings (encrypted in production)
+      await Settings.findOneAndUpdate(
+        { isDefault: true },
+        { $set: { 'discord.token': token, 'discord.enabled': true } },
+        { upsert: true }
+      );
+      
+      res.json({ success: true, message: 'Discord bot connected successfully' });
+    } else {
+      res.status(400).json({ error: 'Failed to connect Discord bot' });
+    }
+  } catch (error) {
+    console.error('Discord connect error:', error);
+    res.status(500).json({ error: 'Failed to connect Discord bot' });
+  }
+});
+
+// Get Discord bot info
+app.get('/api/discord/info', (req, res) => {
+  const info = discordBot.getBotInfo();
+  if (info) {
+    res.json(info);
+  } else {
+    res.status(503).json({ error: 'Discord bot not connected' });
+  }
+});
+
+// Get Discord messages
+app.get('/api/discord/messages', async (req, res) => {
+  try {
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 50;
+    const guildId = req.query.guildId;
+    
+    const query = {};
+    if (guildId) query['guild.id'] = guildId;
+    
+    const skip = (page - 1) * limit;
+    
+    const messages = await DiscordMessage.find(query)
+      .sort({ timestamp: -1 })
+      .skip(skip)
+      .limit(limit);
+      
+    const total = await DiscordMessage.countDocuments(query);
+    
+    res.json({
+      messages,
+      total,
+      page,
+      totalPages: Math.ceil(total / limit)
+    });
+  } catch (error) {
+    console.error('Error fetching Discord messages:', error);
+    res.status(500).json({ error: 'Failed to fetch messages' });
+  }
+});
+
+// Get pending replies
+app.get('/api/discord/pending', async (req, res) => {
+  try {
+    const guildId = req.query.guildId;
+    const query = { replied: false };
+    if (guildId) query['guild.id'] = guildId;
+    
+    const pendingMessages = await DiscordMessage.find(query)
+      .sort({ timestamp: -1 });
+      
+    res.json(pendingMessages);
+  } catch (error) {
+    console.error('Error fetching pending Discord messages:', error);
+    res.status(500).json({ error: 'Failed to fetch pending messages' });
+  }
+});
+
+// Send manual reply
+app.post('/api/discord/reply', async (req, res) => {
+  try {
+    const { messageId, reply } = req.body;
+    
+    const messageDoc = await DiscordMessage.findOne({ messageId });
+    if (!messageDoc) {
+      return res.status(404).json({ error: 'Message not found' });
+    }
+
+    const success = await discordBot.replyToMessage(messageId, messageDoc.channel.id, reply);
+    
+    if (success) {
+      await DiscordMessage.findOneAndUpdate(
+        { messageId },
+        { 
+          replied: true, 
+          botReply: reply, 
+          manualReply: true 
+        }
+      );
+      
+      res.json({ success: true });
+    } else {
+      res.status(500).json({ error: 'Failed to send reply' });
+    }
+  } catch (error) {
+    console.error('Error sending Discord reply:', error);
+    res.status(500).json({ error: 'Failed to send reply' });
+  }
+});
+
+// Send message to channel
+app.post('/api/discord/send', async (req, res) => {
+  try {
+    const { channelId, message } = req.body;
+    
+    const success = await discordBot.sendMessage(channelId, message);
+    
+    if (success) {
+      res.json({ success: true });
+    } else {
+      res.status(500).json({ error: 'Failed to send message' });
+    }
+  } catch (error) {
+    console.error('Error sending Discord message:', error);
+    res.status(500).json({ error: 'Failed to send message' });
+  }
+});
+
+// Get Discord settings
+app.get('/api/discord/settings', async (req, res) => {
+  try {
+    const guildId = req.query.guildId;
+    const settings = await DiscordSettings.findOne({ 
+      $or: [{ guildId }, { isDefault: true }] 
+    }).sort({ guildId: -1 });
+    
+    res.json(settings || {});
+  } catch (error) {
+    console.error('Error fetching Discord settings:', error);
+    res.status(500).json({ error: 'Failed to fetch settings' });
+  }
+});
+
+// Update Discord settings
+app.put('/api/discord/settings', async (req, res) => {
+  try {
+    const { guildId, ...settingsData } = req.body;
+    
+    if (guildId) {
+      await DiscordSettings.findOneAndUpdate(
+        { guildId },
+        { guildId, ...settingsData },
+        { upsert: true, new: true }
+      );
+    } else {
+      await DiscordSettings.findOneAndUpdate(
+        { isDefault: true },
+        { isDefault: true, ...settingsData },
+        { upsert: true, new: true }
+      );
+    }
+    
+    res.json({ success: true, message: 'Discord settings updated' });
+  } catch (error) {
+    console.error('Error updating Discord settings:', error);
+    res.status(500).json({ error: 'Failed to update settings' });
+  }
+});
+
+// Get Discord analytics
+app.get('/api/discord/analytics', async (req, res) => {
+  try {
+    const guildId = req.query.guildId;
+    const query = guildId ? { 'guild.id': guildId } : {};
+    
+    const totalMessages = await DiscordMessage.countDocuments(query);
+    const repliedMessages = await DiscordMessage.countDocuments({ ...query, replied: true });
+    const aiReplies = await DiscordMessage.countDocuments({ ...query, aiGenerated: true });
+    const ragReplies = await DiscordMessage.countDocuments({ ...query, ragUsed: true });
+    
+    // Recent messages (last 24 hours)
+    const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    const recentMessages = await DiscordMessage.countDocuments({
+      ...query,
+      timestamp: { $gte: yesterday }
+    });
+    
+    res.json({
+      totalMessages,
+      repliedMessages,
+      aiReplies,
+      ragReplies,
+      recentMessages,
+      responseRate: totalMessages > 0 ? (repliedMessages / totalMessages * 100).toFixed(1) : 0,
+      aiResponseRate: repliedMessages > 0 ? (aiReplies / repliedMessages * 100).toFixed(1) : 0,
+      ragUsageRate: aiReplies > 0 ? (ragReplies / aiReplies * 100).toFixed(1) : 0
+    });
+  } catch (error) {
+    console.error('Error fetching Discord analytics:', error);
+    res.status(500).json({ error: 'Failed to fetch analytics' });
+  }
+});
 
 // Start server
 server.listen(PORT, () => {
@@ -1373,4 +1591,34 @@ server.listen(PORT, () => {
   console.log(`⚡ Make sure Ollama is running on http://localhost:11434`);
   console.log(`🔑 OpenAI API Key: Dynamic (from database settings)`);
   console.log(`\n🎯 Bot Platform Ready! Create bots via frontend and deploy with embed codes.`);
+});
+// Auto-start Discord bot if configured
+const startDiscordBot = async () => {
+  try {
+    const settings = await Settings.findOne({ isDefault: true });
+    const token = settings?.discord?.token || process.env.DISCORD_BOT_TOKEN;
+    
+    if (token && settings?.discord?.enabled !== false) {
+      console.log('Starting Discord bot...');
+      const success = await discordBot.login(token);
+      if (success) {
+        console.log('✅ Discord bot started successfully');
+      } else {
+        console.log('❌ Failed to start Discord bot');
+      }
+    } else {
+      console.log('💡 Discord bot not configured. Add token via API or environment variable.');
+    }
+  } catch (error) {
+    console.error('Discord bot startup error:', error);
+  }
+};
+
+// Start Discord bot after database connection
+database.connect().then(async () => {
+  await database.initializeDefaultData();
+  await startDiscordBot(); // Add this line
+  console.log('✅ All services initialized');
+}).catch((error) => {
+  console.warn('⚠️  MongoDB not available - some features disabled');
 });
