@@ -21,7 +21,8 @@ import {
   Headphones,
   Sparkles,
   Crown,
-  Ticket
+  Ticket,
+  Shield
 } from 'lucide-react'
 import { useTheme } from '../providers/ThemeProvider'
 
@@ -34,6 +35,7 @@ const NAVIGATION_CONFIG = [
   { name: 'Chat Review', href: '/admin/chats', icon: History, roles: ['admin', 'superadmin', 'manager'] },
   { name: 'Customer Management', href: '/admin/tickets', icon: Ticket, roles: ['admin', 'superadmin', 'manager'] },
   { name: 'User Management', href: '/admin/users', icon: User, roles: ['admin', 'superadmin'] },
+  { name: 'Role Management', href: '/admin/roles', icon: Shield, roles: ['admin', 'superadmin'] },
   { name: 'Analytics', href: '/admin/analytics', icon: BarChart3, roles: ['admin', 'superadmin', 'manager'] },
   { name: 'Knowledge Base', href: '/admin/knowledge-base', icon: FileText, roles: ['admin', 'superadmin', 'manager'] },
   { name: 'Logs', href: '/admin/logs', icon: List, roles: ['admin', 'superadmin'] },

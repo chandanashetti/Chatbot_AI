@@ -67,8 +67,7 @@ scrapedContentSchema.index({
   description: 'text' 
 });
 
-// Index for URL lookups
-scrapedContentSchema.index({ url: 1 });
+// Index for URL lookups (url index is created automatically by unique: true)
 
 // Index for status and date queries
 scrapedContentSchema.index({ status: 1, scrapedAt: -1 });

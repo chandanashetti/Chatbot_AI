@@ -9,9 +9,10 @@ import {
   Plus,
   Search,
   Filter,
-  RefreshCw
+  RefreshCw,
+  X
 } from 'lucide-react';
-import { agentAPI, handoffAPI } from '../../services/api';
+import { agentAPI, handoffAPI, usersAPI } from '../../services/api';
 import { toast } from 'react-hot-toast';
 
 interface Agent {
@@ -66,11 +67,35 @@ interface HandoffRequest {
   updatedAt: Date;
 }
 
+interface CreateAgentFormData {
+  name: string;
+  email: string;
+  phone?: string;
+  userId?: string;
+  departments: string[];
+  skills: Array<{
+    name: string;
+    level: 'beginner' | 'intermediate' | 'advanced' | 'expert';
+    categories: string[];
+  }>;
+  languages: Array<{
+    code: string;
+    name: string;
+    proficiency: 'basic' | 'conversational' | 'fluent' | 'native';
+  }>;
+  availability: {
+    maxConcurrentChats: number;
+    timezone: string;
+  };
+}
+
 const AgentManagement = () => {
   // State management
   const [agents, setAgents] = useState<Agent[]>([]);
   const [handoffRequests, setHandoffRequests] = useState<HandoffRequest[]>([]);
+  const [users, setUsers] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [isCreating, setIsCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   
   // Filters
@@ -78,10 +103,38 @@ const AgentManagement = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [showCreateModal, setShowCreateModal] = useState(false);
 
+  // Agent Creation Form
+  const [formData, setFormData] = useState<CreateAgentFormData>({
+    name: '',
+    email: '',
+    phone: '',
+    userId: '',
+    departments: [],
+    skills: [],
+    languages: [{ code: 'en', name: 'English', proficiency: 'fluent' }],
+    availability: {
+      maxConcurrentChats: 5,
+      timezone: 'UTC'
+    }
+  });
+
   // Load data on component mount
   useEffect(() => {
     loadData();
+    loadUsers();
   }, [statusFilter, searchTerm]);
+
+  const loadUsers = async () => {
+    try {
+      const response = await usersAPI.getUsers({
+        status: 'active',
+        limit: 100
+      });
+      setUsers(response.data.data.users || []);
+    } catch (error: any) {
+      console.error('❌ Error loading users:', error);
+    }
+  };
 
   const loadData = async () => {
     setIsLoading(true);
@@ -150,6 +203,63 @@ const AgentManagement = () => {
       console.error(`❌ Error ${action}ing handoff:`, error);
       toast.error(error.response?.data?.error || `Failed to ${action} handoff`);
     }
+  };
+
+  const handleCreateAgent = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsCreating(true);
+    
+    try {
+      console.log('➕ Creating new agent...', formData);
+      
+      const response = await agentAPI.createAgent(formData);
+      
+      // Add to local state
+      setAgents([response.data.data, ...agents]);
+      
+      // Reset form and close modal
+      setFormData({
+        name: '',
+        email: '',
+        phone: '',
+        userId: '',
+        departments: [],
+        skills: [],
+        languages: [{ code: 'en', name: 'English', proficiency: 'fluent' }],
+        availability: {
+          maxConcurrentChats: 5,
+          timezone: 'UTC'
+        }
+      });
+      setShowCreateModal(false);
+      
+      toast.success('Agent created successfully!');
+    } catch (error: any) {
+      console.error('❌ Error creating agent:', error);
+      toast.error(error.response?.data?.error || 'Failed to create agent');
+    } finally {
+      setIsCreating(false);
+    }
+  };
+
+  const addSkill = () => {
+    setFormData({
+      ...formData,
+      skills: [...formData.skills, { name: '', level: 'intermediate', categories: [] }]
+    });
+  };
+
+  const removeSkill = (index: number) => {
+    setFormData({
+      ...formData,
+      skills: formData.skills.filter((_, i) => i !== index)
+    });
+  };
+
+  const updateSkill = (index: number, field: string, value: any) => {
+    const updatedSkills = [...formData.skills];
+    updatedSkills[index] = { ...updatedSkills[index], [field]: value };
+    setFormData({ ...formData, skills: updatedSkills });
   };
 
   return (
@@ -430,6 +540,245 @@ const AgentManagement = () => {
           </div>
         </div>
       </div>
+
+      {/* Create Agent Modal */}
+      {showCreateModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto">
+            <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700">
+              <div className="flex items-center justify-between">
+                <h2 className="text-xl font-semibold text-gray-900 dark:text-white">Create New Agent</h2>
+                <button
+                  onClick={() => setShowCreateModal(false)}
+                  className="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+            </div>
+
+            <form onSubmit={handleCreateAgent} className="px-6 py-4">
+              <div className="space-y-4">
+                {/* Basic Information */}
+                <div>
+                  <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-3">Basic Information</h3>
+                  
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                        Name *
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        value={formData.name}
+                        onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                        className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                        Email *
+                      </label>
+                      <input
+                        type="email"
+                        required
+                        value={formData.email}
+                        onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                        className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                        Phone
+                      </label>
+                      <input
+                        type="tel"
+                        value={formData.phone}
+                        onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                        className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                        Link to User *
+                      </label>
+                      <select
+                        required
+                        value={formData.userId}
+                        onChange={(e) => setFormData({ ...formData, userId: e.target.value })}
+                        className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      >
+                        <option value="">Select a user...</option>
+                        {users.map(user => (
+                          <option key={user._id} value={user._id}>
+                            {user.profile?.firstName} {user.profile?.lastName} ({user.email})
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Departments */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                    Departments
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="Enter departments separated by commas (e.g. customer-service, technical-support)"
+                    value={formData.departments.join(', ')}
+                    onChange={(e) => setFormData({ 
+                      ...formData, 
+                      departments: e.target.value.split(',').map(d => d.trim()).filter(d => d) 
+                    })}
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
+                </div>
+
+                {/* Availability Settings */}
+                <div>
+                  <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-3">Availability Settings</h3>
+                  
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                        Max Concurrent Chats
+                      </label>
+                      <input
+                        type="number"
+                        min="1"
+                        max="20"
+                        value={formData.availability.maxConcurrentChats}
+                        onChange={(e) => setFormData({
+                          ...formData,
+                          availability: {
+                            ...formData.availability,
+                            maxConcurrentChats: parseInt(e.target.value) || 5
+                          }
+                        })}
+                        className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                        Timezone
+                      </label>
+                      <select
+                        value={formData.availability.timezone}
+                        onChange={(e) => setFormData({
+                          ...formData,
+                          availability: {
+                            ...formData.availability,
+                            timezone: e.target.value
+                          }
+                        })}
+                        className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      >
+                        <option value="UTC">UTC</option>
+                        <option value="America/New_York">Eastern Time</option>
+                        <option value="America/Chicago">Central Time</option>
+                        <option value="America/Denver">Mountain Time</option>
+                        <option value="America/Los_Angeles">Pacific Time</option>
+                        <option value="Europe/London">London</option>
+                        <option value="Europe/Paris">Paris</option>
+                        <option value="Asia/Tokyo">Tokyo</option>
+                        <option value="Asia/Shanghai">Shanghai</option>
+                      </select>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Skills */}
+                <div>
+                  <div className="flex items-center justify-between mb-3">
+                    <h3 className="text-lg font-medium text-gray-900 dark:text-white">Skills</h3>
+                    <button
+                      type="button"
+                      onClick={addSkill}
+                      className="flex items-center space-x-1 px-3 py-1 bg-blue-100 text-blue-700 hover:bg-blue-200 dark:bg-blue-900/20 dark:text-blue-400 dark:hover:bg-blue-900/30 rounded-lg text-sm"
+                    >
+                      <Plus className="w-4 h-4" />
+                      <span>Add Skill</span>
+                    </button>
+                  </div>
+                  
+                  {formData.skills.map((skill, index) => (
+                    <div key={index} className="grid grid-cols-1 md:grid-cols-4 gap-2 mb-2">
+                      <input
+                        type="text"
+                        placeholder="Skill name"
+                        value={skill.name}
+                        onChange={(e) => updateSkill(index, 'name', e.target.value)}
+                        className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm"
+                      />
+                      
+                      <select
+                        value={skill.level}
+                        onChange={(e) => updateSkill(index, 'level', e.target.value)}
+                        className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm"
+                      >
+                        <option value="beginner">Beginner</option>
+                        <option value="intermediate">Intermediate</option>
+                        <option value="advanced">Advanced</option>
+                        <option value="expert">Expert</option>
+                      </select>
+                      
+                      <input
+                        type="text"
+                        placeholder="Categories (comma-separated)"
+                        value={skill.categories.join(', ')}
+                        onChange={(e) => updateSkill(index, 'categories', e.target.value.split(',').map(c => c.trim()).filter(c => c))}
+                        className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm"
+                      />
+                      
+                      <button
+                        type="button"
+                        onClick={() => removeSkill(index)}
+                        className="px-3 py-2 text-red-600 hover:text-red-800 dark:text-red-400 dark:hover:text-red-300"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="flex justify-end space-x-3 mt-6 pt-4 border-t border-gray-200 dark:border-gray-700">
+                <button
+                  type="button"
+                  onClick={() => setShowCreateModal(false)}
+                  className="px-4 py-2 text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isCreating}
+                  className="flex items-center space-x-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {isCreating ? (
+                    <>
+                      <RefreshCw className="w-4 h-4 animate-spin" />
+                      <span>Creating...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Plus className="w-4 h-4" />
+                      <span>Create Agent</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

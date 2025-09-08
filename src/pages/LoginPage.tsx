@@ -45,8 +45,24 @@ const LoginPage = () => {
         const mockUser = {
           id: '1',
           email: formData.email,
-          name: 'Admin User',
-          role: 'admin' as const
+          username: 'admin',
+          role: 'admin' as const,
+          status: 'active',
+          profile: {
+            firstName: 'Admin',
+            lastName: 'User',
+            timezone: 'UTC',
+            language: 'en'
+          },
+          permissions: {
+            dashboard: { view: true, export: true },
+            users: { view: true, create: true, edit: true, delete: true, manageRoles: true },
+            bots: { view: true, create: true, edit: true, delete: true, publish: true },
+            agents: { view: true, create: true, edit: true, delete: true, assign: true },
+            analytics: { view: true, export: true, advanced: true },
+            knowledgeBase: { view: true, upload: true, edit: true, delete: true },
+            settings: { view: true, edit: true, system: true }
+          }
         }
         const mockToken = 'demo-token-123'
         

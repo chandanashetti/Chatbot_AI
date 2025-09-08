@@ -3,8 +3,21 @@ import { createSlice, PayloadAction } from '@reduxjs/toolkit'
 interface User {
   id: string
   email: string
-  name: string
-  role: 'superadmin' | 'admin' | 'manager' | 'operator' | 'viewer'
+  username?: string
+  role: 'superadmin' | 'admin' | 'manager' | 'operator' | 'viewer' | 'agent'
+  status: string
+  profile: {
+    firstName: string
+    lastName: string
+    avatar?: string
+    phone?: string
+    department?: string
+    jobTitle?: string
+    timezone?: string
+    language?: string
+  }
+  permissions: any
+  preferences?: any
 }
 
 interface AuthState {

@@ -586,6 +586,18 @@ export const updateBotStatusAsync = createAsyncThunk(
   }
 )
 
+export const deleteBotAsync = createAsyncThunk(
+  'bots/deleteBot',
+  async (botId: string, { rejectWithValue }) => {
+    try {
+      await botsAPI.deleteBot(botId)
+      return botId
+    } catch (error: any) {
+      return rejectWithValue(error.response?.data?.error || 'Failed to delete bot')
+    }
+  }
+)
+
 export const fetchBotsAsync = createAsyncThunk(
   'bots/fetchBots',
   async (params: { page?: number, limit?: number, type?: string, status?: string, search?: string } = {}, { rejectWithValue }) => {
@@ -923,6 +935,22 @@ const botSlice = createSlice({
       })
       .addCase(updateBotStatusAsync.rejected, (state, action) => {
         state.isLoading = false
+        state.error = action.payload as string
+      })
+    
+    // Delete bot
+    builder
+      .addCase(deleteBotAsync.pending, (state) => {
+        state.error = null
+      })
+      .addCase(deleteBotAsync.fulfilled, (state, action) => {
+        const botId = action.payload
+        // Filter by ID (frontend uses 'id' which maps to backend '_id')
+        state.bots = state.bots.filter(bot => bot.id !== botId)
+        state.pagination.totalItems = Math.max(0, state.pagination.totalItems - 1)
+        state.error = null
+      })
+      .addCase(deleteBotAsync.rejected, (state, action) => {
         state.error = action.payload as string
       })
   }

@@ -10,6 +10,7 @@ import {
   unpublishBot,
   publishBotAsync,
   unpublishBotAsync,
+  deleteBotAsync,
   fetchBotsAsync,
   BotStatus,
   BotType 
@@ -93,8 +94,12 @@ const BotManagement = () => {
         break
       case 'delete':
         if (window.confirm(`Are you sure you want to delete "${bot.name}"?`)) {
-          dispatch(deleteBot(botId))
-          toast.success(`${bot.name} deleted successfully!`)
+          try {
+            await dispatch(deleteBotAsync(botId)).unwrap()
+            toast.success(`${bot.name} deleted successfully!`)
+          } catch (error) {
+            toast.error(`Failed to delete ${bot.name}: ${error}`)
+          }
         }
         break
                 case 'publish':

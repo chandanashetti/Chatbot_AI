@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const User = require('../models/User');
+const Role = require('../models/Role');
 const bcrypt = require('bcryptjs');
 const crypto = require('crypto');
 const multer = require('multer');
@@ -97,6 +98,7 @@ const calculateUserStats = async () => {
     roleDistribution: roleStatsObj
   };
 };
+
 
 // GET /api/users - Get all users with filtering and pagination
 router.get('/', async (req, res) => {
@@ -213,22 +215,88 @@ router.get('/search', async (req, res) => {
   }
 });
 
-// GET /api/users/roles/list - Get available roles
-router.get('/roles/list', (req, res) => {
-  const roles = [
-    { value: 'superadmin', label: 'Super Admin', description: 'Full system access' },
-    { value: 'admin', label: 'Admin', description: 'Administrative access' },
-    { value: 'manager', label: 'Manager', description: 'Management operations' },
-    { value: 'operator', label: 'Operator', description: 'Operational tasks' },
-    { value: 'viewer', label: 'Viewer', description: 'Read-only access' },
-    { value: 'agent', label: 'Agent', description: 'Agent-specific operations' }
-  ];
-  
-  res.json({
-    success: true,
-    data: { roles }
-  });
+// GET /api/users/available-roles - Get available roles for user creation  
+router.get('/available-roles', async (req, res) => {
+  try {
+    console.log('📋 Fetching available roles for users...');
+    
+    const roles = await Role.find({ 
+      isDeleted: false, 
+      status: 'active' 
+    }).select('name description type color priority').sort({ priority: 1 });
+    
+    // Format roles for frontend dropdown
+    const formattedRoles = roles.map(role => ({
+      value: role.name.toLowerCase().replace(/\s+/g, ''),
+      label: role.name,
+      description: role.description,
+      type: role.type,
+      color: role.color
+    }));
+    
+    console.log(`✅ Found ${formattedRoles.length} available roles`);
+    
+    res.json({
+      success: true,
+      data: {
+        roles: formattedRoles
+      }
+    });
+  } catch (error) {
+    console.error('❌ Error fetching roles for users:', error);
+    res.status(500).json({
+      success: false,
+      error: {
+        code: 'FETCH_USER_ROLES_ERROR',
+        message: 'Failed to fetch available roles',
+        details: error.message
+      }
+    });
+  }
 });
+
+// GET /api/users/roles/list - Get available roles (backward compatibility)
+router.get('/roles/list', async (req, res) => {
+  try {
+    const Role = require('../models/Role');
+    
+    // Fetch active roles from the database
+    const rolesFromDB = await Role.find({ 
+      isDeleted: false, 
+      status: 'active' 
+    }).sort({ priority: 1 });
+    
+    // Transform to expected format for backward compatibility
+    const roles = rolesFromDB.map(role => ({
+      value: role.name.toLowerCase().replace(/\s+/g, ''),
+      label: role.name,
+      description: role.description || ''
+    }));
+    
+    res.json({
+      success: true,
+      data: { roles }
+    });
+  } catch (error) {
+    console.error('❌ Error fetching roles:', error);
+    
+    // Fallback to hardcoded roles if database fails
+    const fallbackRoles = [
+      { value: 'superadministrator', label: 'Super Administrator', description: 'Full system access' },
+      { value: 'admin', label: 'Admin', description: 'Administrative access' },
+      { value: 'manager', label: 'Manager', description: 'Management operations' },
+      { value: 'operator', label: 'Operator', description: 'Operational tasks' },
+      { value: 'viewer', label: 'Viewer', description: 'Read-only access' },
+      { value: 'agent', label: 'Agent', description: 'Agent-specific operations' }
+    ];
+    
+    res.json({
+      success: true,
+      data: { roles: fallbackRoles }
+    });
+  }
+});
+
 
 // GET /api/users/:id - Get user by ID
 router.get('/:id', async (req, res) => {

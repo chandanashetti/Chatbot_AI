@@ -195,10 +195,9 @@ HandoffRequestSchema.index({ botId: 1 });
 HandoffRequestSchema.index({ priority: 1, createdAt: 1 });
 HandoffRequestSchema.index({ category: 1 });
 HandoffRequestSchema.index({ platform: 1 });
-HandoffRequestSchema.index({ expiresAt: 1 });
 HandoffRequestSchema.index({ queuePosition: 1 });
 
-// TTL index to automatically remove expired requests
+// TTL index to automatically remove expired requests (also creates the expiresAt index)
 HandoffRequestSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
 
 // Virtual fields

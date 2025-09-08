@@ -293,6 +293,27 @@ export const handoffAPI = {
 }
 
 // Users API
+// Roles API
+export const rolesAPI = {
+  getRoles: (params?: {
+    type?: string
+    status?: string
+    search?: string
+  }) => api.get('/roles', { params }),
+  
+  getRole: (id: string) => api.get(`/roles/${id}`),
+  
+  createRole: (roleData: any) => api.post('/roles', roleData),
+  
+  updateRole: (id: string, roleData: any) => api.put(`/roles/${id}`, roleData),
+  
+  deleteRole: (id: string) => api.delete(`/roles/${id}`),
+  
+  updateRoleStatus: (id: string, status: string) => api.patch(`/roles/${id}/status`, { status }),
+  
+  getRoleStats: () => api.get('/roles/stats'),
+}
+
 export const usersAPI = {
   getUsers: (params: {
     page?: number
@@ -635,6 +656,44 @@ export const userAPI = {
 
   // Get available roles
   getRoles: () => api.get('/users/roles/list'),
+}
+
+// Role Management API
+export const roleAPI = {
+  // Get all roles with filtering
+  getRoles: (params?: {
+    type?: string;
+    status?: string;
+    search?: string;
+  }) => api.get('/roles', { params }),
+
+  // Get role statistics
+  getRoleStats: () => api.get('/roles/stats'),
+
+  // Get specific role
+  getRole: (id: string) => api.get(`/roles/${id}`),
+
+  // Create new role
+  createRole: (roleData: {
+    name: string;
+    description?: string;
+    permissions: any;
+    priority?: number;
+    color?: string;
+  }) => api.post('/roles', roleData),
+
+  // Update role
+  updateRole: (id: string, roleData: any) => api.put(`/roles/${id}`, roleData),
+
+  // Update role status
+  updateRoleStatus: (id: string, status: 'active' | 'inactive') => 
+    api.patch(`/roles/${id}/status`, { status }),
+
+  // Delete role
+  deleteRole: (id: string) => api.delete(`/roles/${id}`),
+
+  // Initialize default system roles
+  initializeRoles: () => api.post('/roles/initialize'),
 }
 
 

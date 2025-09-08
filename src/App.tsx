@@ -11,6 +11,7 @@ import AgentManagement from './pages/admin/AgentManagement'
 import ChatReview from './pages/admin/ChatReview'
 import TicketManagement from './pages/admin/TicketManagement'
 import UserManagement from './pages/admin/UserManagement'
+import RoleManagement from './pages/admin/RoleManagement'
 import BotManagement from './pages/admin/BotManagement'
 import BotBuilder from './pages/admin/BotBuilder'
 import BotSettings from './pages/admin/BotSettings'
@@ -45,6 +46,7 @@ function App() {
             <Route path="chats" element={<ChatReview />} />
             <Route path="tickets" element={<TicketManagement />} />
             <Route path="users" element={<UserManagement />} />
+            <Route path="roles" element={<RoleManagement />} />
             <Route path="bots" element={<BotManagement />} />
             <Route path="bots/:botId/builder" element={<BotBuilder />} />
             <Route path="bots/:botId/settings" element={<BotSettings />} />

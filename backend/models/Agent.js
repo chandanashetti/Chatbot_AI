@@ -223,8 +223,7 @@ const AgentSchema = new mongoose.Schema({
   timestamps: true
 });
 
-// Indexes for performance
-AgentSchema.index({ email: 1 });
+// Indexes for performance (email index is created automatically by unique: true)
 AgentSchema.index({ userId: 1 });
 AgentSchema.index({ status: 1 });
 AgentSchema.index({ 'availability.isOnline': 1 });

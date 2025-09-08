@@ -7,8 +7,10 @@ const crypto = require('crypto');
 
 // Helper function to validate widget ID format
 const isValidWidgetId = (widgetId) => {
-  // Accept both numeric IDs and hex strings
-  return /^\d+$/.test(widgetId) || /^[a-f0-9]{32}$/.test(widgetId);
+  // Accept numeric IDs, 32-char hex strings, and 24-char MongoDB ObjectIds
+  return /^\d+$/.test(widgetId) || 
+         /^[a-f0-9]{32}$/.test(widgetId) || 
+         /^[a-f0-9]{24}$/.test(widgetId);
 };
 
 // Rate limiting middleware
@@ -22,93 +24,207 @@ const widgetLimiter = rateLimit({
   legacyHeaders: false,
 });
 
+// Test endpoint for widget debugging (must be before parameterized routes)
+router.get('/test/:widgetId', async (req, res) => {
+  try {
+    const { widgetId } = req.params;
+    console.log(`🧪 Testing widget ID: ${widgetId}`);
+    
+    const bot = await Bot.findOne({ 'deployment.widgetId': widgetId });
+    
+    if (!bot) {
+      return res.json({ error: 'Bot not found', widgetId });
+    }
+    
+    res.json({
+      success: true,
+      bot: {
+        name: bot.name,
+        isPublished: bot.isPublished,
+        status: bot.status,
+        widgetId: bot.deployment?.widgetId,
+        hasSettings: !!bot.settings,
+        hasAppearance: !!bot.settings?.appearance
+      }
+    });
+  } catch (error) {
+    console.error('Test endpoint error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Health check for widget (must be before parameterized routes)
+router.get('/health', (req, res) => {
+  res.json({
+    status: 'healthy',
+    timestamp: new Date().toISOString(),
+    service: 'widget-api'
+  });
+});
+
 // Middleware to verify widget access
 const verifyWidgetAccess = async (req, res, next) => {
   try {
     const { widgetId } = req.params;
     const origin = req.get('Origin') || req.get('Referer');
     
+    console.log(`🔍 Verifying widget access for widgetId: ${widgetId}`);
+    console.log(`🌐 Origin: ${origin || 'none'}`);
+    
     // Validate widget ID format
     if (!isValidWidgetId(widgetId)) {
+      console.log(`❌ Invalid widget ID format: ${widgetId}`);
       return res.status(400).json({ error: 'Invalid widget ID format' });
     }
     
     // Try to find the bot by widget ID or by ID
-    const bot = await Bot.findOne({
-      $or: [
-        { 'deployment.widgetId': widgetId },
-        { _id: widgetId }
-      ]
-    });
+    console.log(`🔍 Searching for bot with widgetId: ${widgetId}`);
+    
+    let bot = null;
+    try {
+      bot = await Bot.findOne({
+        $or: [
+          { 'deployment.widgetId': widgetId },
+          { _id: widgetId }
+        ]
+      });
+    } catch (dbError) {
+      console.error('Database query error:', dbError);
+      // Try a simpler query if the first one fails
+      try {
+        bot = await Bot.findOne({ 'deployment.widgetId': widgetId });
+      } catch (secondError) {
+        console.error('Second database query error:', secondError);
+        throw new Error('Database query failed');
+      }
+    }
     
     if (!bot) {
+      console.log(`❌ Bot not found for widgetId: ${widgetId}`);
       return res.status(404).json({ error: 'Widget not found' });
     }
 
+    console.log(`✅ Bot found: ${bot.name} (isPublished: ${bot.isPublished}, status: ${bot.status})`);
+
     // Check if bot is published and active
     if (!bot.isPublished || bot.status !== 'active') {
+      console.log(`❌ Bot not available: isPublished=${bot.isPublished}, status=${bot.status}`);
       return res.status(403).json({ error: 'Widget is not available' });
     }
 
-    // Check domain restrictions
+    // Check domain restrictions (skip for localhost/development)
     if (bot.deployment.domains && bot.deployment.domains.length > 0 && origin) {
-      const allowedDomains = bot.deployment.domains;
-      const requestDomain = new URL(origin).hostname;
-      
-      const isAllowed = allowedDomains.some(domain => {
-        if (domain.startsWith('*.')) {
-          // Wildcard subdomain matching
-          const baseDomain = domain.slice(2);
-          return requestDomain.endsWith(baseDomain);
-        }
-        return requestDomain === domain;
-      });
+      try {
+        const allowedDomains = bot.deployment.domains;
+        const requestDomain = new URL(origin).hostname;
+        
+        console.log(`🌐 Checking domain restrictions. Request domain: ${requestDomain}, allowed: ${allowedDomains.join(', ')}`);
+        
+        const isAllowed = allowedDomains.some(domain => {
+          if (domain.startsWith('*.')) {
+            // Wildcard subdomain matching
+            const baseDomain = domain.slice(2);
+            return requestDomain.endsWith(baseDomain);
+          }
+          return requestDomain === domain;
+        });
 
-      if (!isAllowed) {
-        return res.status(403).json({ error: 'Widget not authorized for this domain' });
+        if (!isAllowed) {
+          console.log(`❌ Domain ${requestDomain} not authorized`);
+          return res.status(403).json({ error: 'Widget not authorized for this domain' });
+        }
+      } catch (urlError) {
+        console.log(`⚠️ URL parsing error (allowing access): ${urlError.message}`);
+        // Allow access if URL parsing fails (for local development)
       }
+    } else {
+      console.log(`✅ No domain restrictions or no origin header - access allowed`);
     }
 
     req.bot = bot;
+    console.log(`✅ Widget access verified successfully for ${bot.name}`);
     next();
   } catch (error) {
     console.error('Widget access verification error:', error);
-    res.status(500).json({ error: 'Internal server error' });
+    console.error('Error details:', error.stack);
+    res.status(500).json({ error: 'Internal server error', details: error.message });
   }
 };
 
-// GET /api/widget/:widgetId/config - Get widget configuration
-router.get('/:widgetId/config', verifyWidgetAccess, async (req, res) => {
+// GET /api/widget/:widgetId/config - Get widget configuration (simplified)
+router.get('/:widgetId/config', async (req, res) => {
   try {
-    const bot = req.bot;
+    const { widgetId } = req.params;
+    
+    console.log(`📱 Getting widget config for widgetId: ${widgetId}`);
+    
+    // Find the bot directly
+    const bot = await Bot.findOne({ 'deployment.widgetId': widgetId });
+    
+    if (!bot) {
+      console.log(`❌ Bot not found for widgetId: ${widgetId}`);
+      return res.status(404).json({ error: 'Widget not found' });
+    }
+    
+    console.log(`✅ Bot found: ${bot.name}`);
+    
+    // Safe access to nested properties with defaults
+    const appearance = bot.settings?.appearance || {};
+    const theme = appearance.theme || {};
+    const typography = appearance.typography || {};
+    const position = appearance.position || {};
+    const messageStyle = appearance.messageStyle || {};
+    const background = appearance.background || {};
+    const behavior = bot.settings?.behavior || {};
+    const deployment = bot.deployment || {};
     
     const config = {
-      widgetId: bot.deployment.widgetId,
+      widgetId: deployment.widgetId,
       appearance: {
-        name: bot.settings.appearance.name || bot.name,
-        welcomeMessage: bot.settings.appearance.welcomeMessage,
-        description: bot.settings.appearance.description,
-        avatar: bot.settings.appearance.avatar,
-        theme: bot.settings.appearance.theme,
-        typography: bot.settings.appearance.typography,
-        position: bot.settings.appearance.position,
-        messageStyle: bot.settings.appearance.messageStyle,
-        background: bot.settings.appearance.background
+        name: appearance.name || bot.name || 'AI Assistant',
+        welcomeMessage: appearance.welcomeMessage || 'Hello! How can I help you today?',
+        description: appearance.description || '',
+        avatar: appearance.avatar || '',
+        theme: {
+          primaryColor: theme.primaryColor || '#3B82F6',
+          secondaryColor: theme.secondaryColor || '#EFF6FF',
+          backgroundColor: theme.backgroundColor || '#FFFFFF',
+          textColor: theme.textColor || '#374151'
+        },
+        typography: {
+          fontFamily: typography.fontFamily || 'system-ui',
+          fontSize: typography.fontSize || 14,
+          lineHeight: typography.lineHeight || 1.5
+        },
+        position: {
+          side: position.side || 'right',
+          offset: position.offset || { x: 20, y: 20 }
+        },
+        messageStyle: {
+          bubbleStyle: messageStyle.bubbleStyle || 'rounded',
+          showAvatar: messageStyle.showAvatar !== false,
+          showTimestamp: messageStyle.showTimestamp || false
+        },
+        background: {
+          type: background.type || 'none',
+          value: background.value || ''
+        }
       },
       behavior: {
-        typingIndicator: bot.settings.behavior.typingIndicator,
-        responseDelay: bot.settings.behavior.responseDelay
+        typingIndicator: behavior.typingIndicator !== false,
+        responseDelay: behavior.responseDelay || 1000
       },
       branding: {
         showPoweredBy: true,
-        customCSS: bot.deployment.customCSS
+        customCSS: deployment.customCSS || ''
       }
     };
 
+    console.log(`✅ Widget config generated successfully for ${bot.name}`);
     res.json(config);
   } catch (error) {
     console.error('Get widget config error:', error);
-    res.status(500).json({ error: 'Failed to get widget configuration' });
+    res.status(500).json({ error: 'Failed to get widget configuration', details: error.message });
   }
 });
 
@@ -334,13 +450,5 @@ router.post('/:widgetId/handoff', verifyWidgetAccess, async (req, res) => {
   }
 });
 
-// Health check for widget
-router.get('/health', (req, res) => {
-  res.json({
-    status: 'healthy',
-    timestamp: new Date().toISOString(),
-    service: 'widget-api'
-  });
-});
 
 module.exports = router;

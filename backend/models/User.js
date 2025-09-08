@@ -156,7 +156,6 @@ const userSchema = new mongoose.Schema({
   // Role and Status
   role: {
     type: String,
-    enum: ['superadmin', 'admin', 'manager', 'operator', 'viewer', 'agent'],
     default: 'viewer'
   },
   
@@ -223,9 +222,7 @@ const userSchema = new mongoose.Schema({
   toObject: { virtuals: true }
 });
 
-// Indexes
-userSchema.index({ email: 1 });
-userSchema.index({ username: 1 }, { sparse: true });
+// Indexes (email and username indexes are created automatically by unique: true)
 userSchema.index({ role: 1 });
 userSchema.index({ status: 1 });
 userSchema.index({ 'profile.firstName': 1, 'profile.lastName': 1 });
@@ -235,12 +232,15 @@ userSchema.index({ isDeleted: 1 });
 
 // Virtual for full name
 userSchema.virtual('fullName').get(function() {
+  if (!this.profile || !this.profile.firstName || !this.profile.lastName) {
+    return 'Unknown User';
+  }
   return `${this.profile.firstName} ${this.profile.lastName}`.trim();
 });
 
 // Virtual for account lock status
 userSchema.virtual('isLocked').get(function() {
-  return !!(this.security.lockUntil && this.security.lockUntil > Date.now());
+  return !!(this.security && this.security.lockUntil && this.security.lockUntil > Date.now());
 });
 
 // Pre-save middleware
@@ -256,9 +256,9 @@ userSchema.pre('save', async function(next) {
     this.lastActivity = Date.now();
   }
   
-  // Set default permissions based on role
-  if (this.isModified('role') && this.isNew) {
-    this.permissions = this.getDefaultPermissions();
+  // Validate role exists and set permissions based on role
+  if (this.isModified('role')) {
+    await this.validateAndSetRolePermissions();
   }
   
   next();
@@ -299,6 +299,54 @@ userSchema.methods.resetFailedLogin = function() {
   this.security.failedLoginAttempts = 0;
   this.security.lockUntil = undefined;
   return this.save();
+};
+
+userSchema.methods.validateAndSetRolePermissions = async function() {
+  const Role = require('./Role');
+  
+  // Convert role name to match Role model format (handle both display names and normalized names)
+  const roleNormalizedName = this.role.toLowerCase().replace(/\s+/g, '');
+  
+  // Try to find role by name (both original and normalized formats)
+  let role = await Role.findOne({ 
+    $or: [
+      { name: this.role, isDeleted: false, status: 'active' },
+      { name: new RegExp(`^${this.role}$`, 'i'), isDeleted: false, status: 'active' }
+    ]
+  });
+  
+  // If role not found, try legacy hardcoded role mapping
+  if (!role) {
+    const legacyRoleMap = {
+      'superadmin': 'Super Administrator',
+      'admin': 'Administrator',
+      'manager': 'Manager',
+      'operator': 'Operator',
+      'viewer': 'Viewer',
+      'agent': 'Agent'
+    };
+    
+    const mappedRoleName = legacyRoleMap[roleNormalizedName];
+    if (mappedRoleName) {
+      role = await Role.findOne({ 
+        name: mappedRoleName, 
+        isDeleted: false, 
+        status: 'active' 
+      });
+    }
+  }
+  
+  if (role) {
+    // Update permissions from role
+    this.permissions = role.permissions.toObject();
+    // Store the role name as used in Role model for consistency
+    this.role = roleNormalizedName;
+  } else {
+    // Fallback to default viewer permissions if role not found
+    console.warn(`Role "${this.role}" not found, using viewer permissions`);
+    this.role = 'viewer';
+    this.permissions = this.getDefaultPermissions();
+  }
 };
 
 userSchema.methods.getDefaultPermissions = function() {

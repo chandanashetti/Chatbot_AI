@@ -210,8 +210,7 @@ const botConversationSchema = new mongoose.Schema({
   collection: 'bot_conversations'
 });
 
-// Indexes for performance
-botConversationSchema.index({ conversationId: 1 }, { unique: true });
+// Indexes for performance (conversationId index is created automatically by unique: true)
 botConversationSchema.index({ botId: 1, createdAt: -1 });
 botConversationSchema.index({ sessionId: 1 });
 botConversationSchema.index({ userId: 1 });

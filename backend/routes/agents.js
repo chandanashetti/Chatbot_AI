@@ -165,21 +165,18 @@ router.get('/:id', ensureUser, async (req, res) => {
 router.post('/', ensureUser, async (req, res) => {
   try {
     console.log('➕ Creating new agent...');
-    const agentData = {
-      ...req.body,
-      createdBy: req.user._id || req.user.id
-    };
-
+    const { userId, ...otherData } = req.body;
+    
     // Validate required fields
-    if (!agentData.name || !agentData.email) {
+    if (!otherData.name || !otherData.email || !userId) {
       return res.status(400).json({
         success: false,
-        error: 'Name and email are required'
+        error: 'Name, email, and userId are required'
       });
     }
 
     // Check if email already exists
-    const existingAgent = await Agent.findOne({ email: agentData.email });
+    const existingAgent = await Agent.findOne({ email: otherData.email });
     if (existingAgent) {
       return res.status(400).json({
         success: false,
@@ -187,10 +184,48 @@ router.post('/', ensureUser, async (req, res) => {
       });
     }
 
+    // Check if userId exists
+    const User = require('../models/User');
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(400).json({
+        success: false,
+        error: 'Selected user does not exist'
+      });
+    }
+
+    // Check if user is already linked to an agent
+    const existingUserAgent = await Agent.findOne({ userId: userId });
+    if (existingUserAgent) {
+      return res.status(400).json({
+        success: false,
+        error: 'This user is already linked to another agent'
+      });
+    }
+
+    const agentData = {
+      ...otherData,
+      userId: userId,
+      createdBy: req.user._id || req.user.id,
+      // Set default availability
+      availability: {
+        isOnline: false,
+        lastSeen: new Date(),
+        maxConcurrentChats: otherData.availability?.maxConcurrentChats || 5,
+        workingHours: {
+          timezone: otherData.availability?.timezone || 'UTC',
+          schedule: []
+        }
+      }
+    };
+
     const agent = new Agent(agentData);
     await agent.save();
 
-    console.log(`✅ Created agent: ${agent.name} (${agent.email})`);
+    // Populate the userId field for the response
+    await agent.populate('userId', 'email profile.firstName profile.lastName');
+
+    console.log(`✅ Created agent: ${agent.name} (${agent.email}) linked to user ${user.email}`);
     
     res.status(201).json({
       success: true,

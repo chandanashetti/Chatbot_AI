@@ -230,7 +230,7 @@ botSchema.index({ createdBy: 1 });
 botSchema.index({ status: 1 });
 botSchema.index({ type: 1 });
 botSchema.index({ isPublished: 1 });
-botSchema.index({ 'deployment.widgetId': 1 });
+// deployment.widgetId index is created automatically by unique: true
 botSchema.index({ 'deployment.domains': 1 });
 botSchema.index({ createdAt: -1 });
 

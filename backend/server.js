@@ -1289,108 +1289,7 @@ app.get('/api/rag/stats', async (req, res) => {
   }
 });
 
-// Get settings
-app.get('/api/settings', async (req, res) => {
-  try {
-    let settings = await Settings.findOne({ isDefault: true });
-    
-    if (!settings) {
-      // Create default settings if none exist
-      settings = new Settings({
-        isDefault: true,
-        openai: {
-          apiKey: '' // Will be set through frontend settings
-        }
-      });
-      await settings.save();
-    }
-    
-    // Don't send sensitive data to frontend
-    const settingsObj = settings.toObject();
-    if (settingsObj.openai && settingsObj.openai.apiKey) {
-      settingsObj.openai.apiKey = '***masked***';
-    }
-    
-    res.json(settingsObj);
-    
-  } catch (error) {
-    console.error('Get settings error:', error);
-    res.status(500).json({
-      error: 'Failed to get settings',
-      details: error.message
-    });
-  }
-});
-
-// Update settings
-app.put('/api/settings', async (req, res) => {
-  try {
-    const newSettings = req.body;
-    
-    // Validate required fields
-    if (!newSettings || typeof newSettings !== 'object') {
-      return res.status(400).json({ error: 'Invalid settings data' });
-    }
-    
-    // Find existing settings or create new
-    let settings = await Settings.findOne({ isDefault: true });
-    
-    if (!settings) {
-      settings = new Settings({ isDefault: true });
-    }
-    
-    // Update settings fields
-    Object.keys(newSettings).forEach(key => {
-      if (key !== '_id' && key !== '__v' && key !== 'isDefault') {
-        settings[key] = newSettings[key];
-      }
-    });
-    
-    // Handle API key updates (don't overwrite if masked)
-    if (newSettings.openai && newSettings.openai.apiKey && newSettings.openai.apiKey !== '***masked***') {
-      settings.openai.apiKey = newSettings.openai.apiKey;
-    }
-    
-    await settings.save();
-    
-    console.log('Settings updated successfully');
-    
-    // Return settings without sensitive data
-    const settingsObj = settings.toObject();
-    if (settingsObj.openai && settingsObj.openai.apiKey) {
-      settingsObj.openai.apiKey = '***masked***';
-    }
-    
-    res.json({ 
-      success: true, 
-      message: 'Settings updated successfully',
-      settings: settingsObj 
-    });
-    
-  } catch (error) {
-    console.error('Settings update error:', error);
-    res.status(500).json({
-      error: 'Failed to update settings',
-      details: error.message
-    });
-  }
-});
-
-// Get available models
-app.get('/api/settings/models', (req, res) => {
-  res.json({
-    chat: [
-      { id: 'openai', name: 'OpenAI', description: 'GPT models from OpenAI' },
-      { id: 'gpt-3.5-turbo', name: 'GPT-3.5 Turbo', description: 'Fast and cost-effective' },
-      { id: 'gpt-4', name: 'GPT-4', description: 'Most capable model' },
-      { id: 'ollama', name: 'Ollama (Local)', description: 'Run models locally with Ollama' }
-    ],
-    embedding: [
-      { id: 'text-embedding-ada-002', name: 'Ada v2', description: 'Most capable embedding model' },
-      { id: 'mxbai-embed-large', name: 'MxBai Embed Large', description: 'High-quality embeddings' }
-    ]
-  });
-});
+// Settings routes are now handled in routes/settings.js
 
 // Bot Management Routes
 const botRoutes = require('./routes/bots');
@@ -1404,18 +1303,27 @@ const agentRoutes = require('./routes/agents');
 const handoffRoutes = require('./routes/handoffs');
 const authRoutes = require('./routes/auth');
 const userRoutes = require('./routes/users');
+const roleRoutes = require('./routes/roles');
+const settingsRoutes = require('./routes/settings');
+const webScrapingRoutes = require('./routes/webScraping');
 
 // Public routes (no authentication required)
 app.use('/api/auth', authRoutes);
 
+// Public roles endpoint for user creation
+app.use('/api/users/roles', userRoutes);
+
 // Protected routes (authentication required)
 app.use('/api/users', ensureUser, userRoutes);
+app.use('/api/roles', ensureUser, roleRoutes);
 app.use('/api/bots', ensureUser, botRoutes);
 app.use('/api/widget', widgetRoutes);
 app.use('/api/deployment', ensureUser, deploymentRoutes);
 app.use('/api/analytics', ensureUser, analyticsRoutes);
 app.use('/api/agents', ensureUser, agentRoutes);
 app.use('/api/handoffs', ensureUser, handoffRoutes);
+app.use('/api/settings', ensureUser, settingsRoutes);
+app.use('/api/web-scraping', ensureUser, webScrapingRoutes);
 
 // Serve widget static files with proper headers
 app.use(express.static(path.join(__dirname, 'public')));
@@ -1438,212 +1346,7 @@ app.use(notFoundHandler);
 // Global error handler
 app.use(errorHandler);
 
-// Web Scraping API endpoints
-const webScraper = new WebScraper();
-
-// Get web scraping settings
-app.get('/api/web-scraping/settings', async (req, res) => {
-  try {
-    const settings = await Settings.findOne({ isDefault: true });
-    res.json({
-      webScraping: settings?.webScraping || {
-        enabled: false,
-        urls: [],
-        cacheTimeout: 3600000,
-        maxUrls: 10,
-        requestTimeout: 10000
-      }
-    });
-  } catch (error) {
-    console.error('Web scraping settings error:', error);
-    res.status(500).json({ error: 'Failed to get web scraping settings' });
-  }
-});
-
-// Update web scraping settings
-app.put('/api/web-scraping/settings', async (req, res) => {
-  try {
-    const { webScraping } = req.body;
-    
-    await Settings.findOneAndUpdate(
-      { isDefault: true },
-      { $set: { webScraping } },
-      { new: true, upsert: true }
-    );
-    
-    res.json({ success: true, message: 'Web scraping settings updated' });
-  } catch (error) {
-    console.error('Update web scraping settings error:', error);
-    res.status(500).json({ error: 'Failed to update web scraping settings' });
-  }
-});
-
-// Add URL to scraping list
-app.post('/api/web-scraping/urls', async (req, res) => {
-  try {
-    const { url, name, description } = req.body;
-    
-    if (!url || !name) {
-      return res.status(400).json({ error: 'URL and name are required' });
-    }
-
-    const urlEntry = {
-      id: uuidv4(),
-      url,
-      name,
-      description: description || '',
-      enabled: true,
-      scrapingStatus: 'pending',
-      addedAt: new Date()
-    };
-
-    await Settings.findOneAndUpdate(
-      { isDefault: true },
-      { $push: { 'webScraping.urls': urlEntry } },
-      { new: true, upsert: true }
-    );
-
-    res.json({ success: true, urlEntry });
-  } catch (error) {
-    console.error('Add URL error:', error);
-    res.status(500).json({ error: 'Failed to add URL' });
-  }
-});
-
-// Remove URL from scraping list
-app.delete('/api/web-scraping/urls/:id', async (req, res) => {
-  try {
-    const { id } = req.params;
-
-    await Settings.findOneAndUpdate(
-      { isDefault: true },
-      { $pull: { 'webScraping.urls': { id } } }
-    );
-
-    // Also remove cached content
-    await ScrapedContent.deleteMany({ 'metadata.urlId': id });
-
-    res.json({ success: true });
-  } catch (error) {
-    console.error('Remove URL error:', error);
-    res.status(500).json({ error: 'Failed to remove URL' });
-  }
-});
-
-// Manually trigger scraping for specific URL
-app.post('/api/web-scraping/scrape/:id', async (req, res) => {
-  try {
-    const { id } = req.params;
-    
-    const settings = await Settings.findOne({ isDefault: true });
-    const urlEntry = settings?.webScraping?.urls?.find(u => u.id === id);
-    
-    if (!urlEntry) {
-      return res.status(404).json({ error: 'URL not found' });
-    }
-
-    const result = await webScraper.scrapeUrl(urlEntry.url, {
-      timeout: settings?.webScraping?.requestTimeout || 10000,
-      userAgent: settings?.webScraping?.userAgent,
-      maxContentLength: settings?.webScraping?.maxContentLength || 50000
-    });
-
-    // Update URL status
-    await Settings.findOneAndUpdate(
-      { isDefault: true, 'webScraping.urls.id': id },
-      {
-        $set: {
-          'webScraping.urls.$.scrapingStatus': result.status,
-          'webScraping.urls.$.lastScraped': new Date(),
-          'webScraping.urls.$.errorMessage': result.error || undefined,
-          'webScraping.urls.$.contentLength': result.contentLength
-        }
-      }
-    );
-
-    if (result.status === 'success') {
-      // Save/update cached content
-      await ScrapedContent.findOneAndUpdate(
-        { url: urlEntry.url },
-        {
-          ...result,
-          chunks: [], // Will be populated later
-          metadata: {
-            urlId: id,
-            userAgent: settings?.webScraping?.userAgent
-          }
-        },
-        { upsert: true, new: true }
-      );
-    }
-
-    res.json({ success: true, result });
-  } catch (error) {
-    console.error('Manual scraping error:', error);
-    res.status(500).json({ error: 'Failed to scrape URL' });
-  }
-});
-
-// Get scraped content
-app.get('/api/web-scraping/content', async (req, res) => {
-  try {
-    const content = await ScrapedContent.find({ status: 'success' })
-      .select('url title description contentLength scrapedAt')
-      .sort({ scrapedAt: -1 });
-    
-    res.json({ content });
-  } catch (error) {
-    console.error('Get scraped content error:', error);
-    res.status(500).json({ error: 'Failed to get scraped content' });
-  }
-});
-
-// Search scraped content (for RAG integration)
-app.post('/api/web-scraping/search', async (req, res) => {
-  try {
-    const { query, topK = 5 } = req.body;
-    
-    if (!query) {
-      return res.status(400).json({ error: 'Query is required' });
-    }
-
-    // Search scraped content using MongoDB text search
-    const results = await ScrapedContent.find(
-      { 
-        $text: { $search: query },
-        status: 'success'
-      },
-      { score: { $meta: 'textScore' } }
-    )
-    .sort({ score: { $meta: 'textScore' } })
-    .limit(topK);
-
-    // Format results similar to document search
-    const formattedResults = results.map(result => ({
-      chunk: {
-        id: uuidv4(),
-        content: result.content.substring(0, 1000), // First 1000 chars
-        metadata: {
-          source: 'web',
-          url: result.url,
-          title: result.title,
-          scrapedAt: result.scrapedAt
-        }
-      },
-      score: Math.random() * 0.3 + 0.7, // Placeholder score
-      document: {
-        id: result._id,
-        name: result.title,
-        type: 'web'
-      }
-    }));
-
-    res.json(formattedResults);
-  } catch (error) {
-    console.error('Web content search error:', error);
-    res.status(500).json({ error: 'Failed to search web content' });
-  }
-});
+// Web scraping endpoints are now handled in routes/webScraping.js
 
 // Start server
 server.listen(PORT, () => {

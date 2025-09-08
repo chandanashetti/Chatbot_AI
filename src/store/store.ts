@@ -8,6 +8,7 @@ import analyticsReducer from './slices/analyticsSlice'
 import logsReducer from './slices/logsSlice'
 import userReducer from './slices/userSlice'
 import botReducer from './slices/botSlice'
+import roleReducer from './slices/roleSlice'
 import vectorStoreReducer from './slices/vectorStoreSlice'
 
 export const store = configureStore({
@@ -21,6 +22,7 @@ export const store = configureStore({
     logs: logsReducer,
     users: userReducer,
     bots: botReducer,
+    roles: roleReducer,
     vectorStore: vectorStoreReducer,
   },
   middleware: (getDefaultMiddleware) =>

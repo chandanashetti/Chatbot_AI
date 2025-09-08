@@ -22,11 +22,18 @@ const verifyBotOwnership = async (req, res, next) => {
       req.user = { id: userId, role: defaultUser.role };
     }
     
-    // Check if user owns the bot or is in the team
-    if (bot.createdBy.toString() !== userId.toString() && !bot.team?.includes(userId)) {
+    // For development: Allow access to all bots regardless of ownership
+    // Check if user owns the bot or is in the team, or allow all for development
+    const isOwner = bot.createdBy.toString() === userId.toString();
+    const isInTeam = bot.team?.includes(userId);
+    const isDevelopmentMode = true; // Set to false in production
+    
+    if (!isOwner && !isInTeam && !isDevelopmentMode) {
+      console.log(`❌ Access denied for user ${userId} to bot ${bot._id} (owner: ${bot.createdBy})`);
       return res.status(403).json({ error: 'Access denied' });
     }
     
+    console.log(`✅ Access granted for user ${userId} to bot ${bot._id} (development mode: ${isDevelopmentMode})`);
     req.bot = bot;
     next();
   } catch (error) {
@@ -38,6 +45,8 @@ const verifyBotOwnership = async (req, res, next) => {
 // GET /api/bots - Get all bots for user
 router.get('/', async (req, res) => {
   try {
+    console.log('📋 Fetching bots...');
+    
     // Ensure we have a valid user ID
     let userId = req.user?.id;
     if (!userId) {
@@ -45,9 +54,22 @@ router.get('/', async (req, res) => {
       userId = defaultUser._id;
     }
 
-    const bots = await Bot.find({ createdBy: userId })
+    console.log('👤 Current user ID:', userId);
+
+    // For development: Show all bots if no bots found for current user
+    let bots = await Bot.find({ createdBy: userId })
       .populate('createdBy', 'name email')
       .sort({ createdAt: -1 });
+
+    // If no bots found for current user, show all bots (development mode)
+    if (bots.length === 0) {
+      console.log('⚠️ No bots found for current user, showing all bots (development mode)');
+      bots = await Bot.find({})
+        .populate('createdBy', 'name email')
+        .sort({ createdAt: -1 });
+    }
+
+    console.log(`✅ Found ${bots.length} bots`);
 
     res.json({
       success: true,

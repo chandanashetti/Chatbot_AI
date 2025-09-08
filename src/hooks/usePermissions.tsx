@@ -16,12 +16,10 @@ export interface PermissionCheck {
 
 export const usePermissions = (): PermissionCheck => {
   const { user } = useSelector((state: RootState) => state.auth)
-  const { users } = useSelector((state: RootState) => state.users)
   
-  // Get current user's full details including permissions
-  const currentUser = user ? users.find(u => u.email === user.email) : null
-  const currentRole = currentUser?.role || null
-  const permissions = currentUser?.permissions || null
+  // Use the user directly from auth state (it now includes permissions)
+  const currentRole = user?.role || null
+  const permissions = user?.permissions || null
 
   const hasPermission = (module: keyof UserPermissions, action: string): boolean => {
     if (!permissions || !permissions[module]) return false
