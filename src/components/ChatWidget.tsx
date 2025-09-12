@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react'
-import { MessageCircle, X, Send, Minimize2, Maximize2, Bot, ThumbsUp, ThumbsDown, Volume2, VolumeX } from 'lucide-react'
+import { MessageCircle, X, Send, Minimize2, Maximize2, Bot, ThumbsUp, ThumbsDown, Volume2, VolumeX, Users, Clock } from 'lucide-react'
 import { chatAPI, reactionsAPI } from '../services/api'
 import toast from 'react-hot-toast'
 
@@ -8,6 +8,14 @@ interface Message {
   content: string
   role: 'user' | 'assistant'
   timestamp: Date
+  type?: 'text' | 'handoff_created' | 'handoff_accepted'
+  handoffRequest?: {
+    id: string
+    status: string
+    priority: string
+    estimatedWaitTime: number
+    queuePosition: number
+  }
 }
 
 interface ChatWidgetProps {
@@ -43,6 +51,8 @@ const ChatWidget: React.FC<ChatWidgetProps> = ({
   const [messageReactions, setMessageReactions] = useState<Record<string, 'like' | 'dislike' | null>>({})
   const [speakingMessageId, setSpeakingMessageId] = useState<string | null>(null)
   const [speechSynthesis, setSpeechSynthesis] = useState<SpeechSynthesis | null>(null)
+  const [handoffStatus, setHandoffStatus] = useState<'none' | 'pending' | 'accepted' | 'completed'>('none')
+  const [currentHandoffId, setCurrentHandoffId] = useState<string | null>(null)
   
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
@@ -74,6 +84,48 @@ const ChatWidget: React.FC<ChatWidgetProps> = ({
       }
     }
   }, [])
+
+  // Poll for handoff status updates when there's an active handoff
+  useEffect(() => {
+    if (!currentHandoffId || handoffStatus === 'completed') return
+
+    const pollHandoffStatus = async () => {
+      try {
+        const response = await chatAPI.getHandoffStatus(currentHandoffId)
+        const status = response.data.status
+
+        if (status !== handoffStatus) {
+          setHandoffStatus(status)
+          
+          if (status === 'accepted') {
+            const agentMessage: Message = {
+              id: Date.now().toString(),
+              content: `Great! An agent has joined the chat and will assist you now.`,
+              role: 'assistant',
+              timestamp: new Date(),
+              type: 'handoff_accepted'
+            }
+            setMessages(prev => [...prev, agentMessage])
+            toast.success('Connected to agent!')
+          } else if (status === 'completed') {
+            const completionMessage: Message = {
+              id: Date.now().toString(),
+              content: `The chat has been completed. You can continue chatting with the AI if you need further assistance.`,
+              role: 'assistant',
+              timestamp: new Date()
+            }
+            setMessages(prev => [...prev, completionMessage])
+            setCurrentHandoffId(null)
+          }
+        }
+      } catch (error) {
+        console.error('Error polling handoff status:', error)
+      }
+    }
+
+    const interval = setInterval(pollHandoffStatus, 5000) // Poll every 5 seconds
+    return () => clearInterval(interval)
+  }, [currentHandoffId, handoffStatus])
 
   // Handle message reactions
   const handleReaction = async (messageId: string, reaction: 'like' | 'dislike') => {
@@ -177,7 +229,16 @@ const ChatWidget: React.FC<ChatWidgetProps> = ({
         id: (Date.now() + 1).toString(),
         content: response.data.content || response.data.message || 'Sorry, I could not process your request.',
         role: 'assistant',
-        timestamp: new Date()
+        timestamp: new Date(),
+        type: response.data.type || 'text',
+        handoffRequest: response.data.handoffRequest
+      }
+
+      // Handle handoff creation
+      if (response.data.type === 'handoff_created' && response.data.handoffRequest) {
+        setHandoffStatus('pending')
+        setCurrentHandoffId(response.data.handoffRequest.id)
+        console.log('🤝 Handoff request created:', response.data.handoffRequest.id)
       }
 
       setMessages(prev => [...prev, assistantMessage])
@@ -200,6 +261,57 @@ const ChatWidget: React.FC<ChatWidgetProps> = ({
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault()
       handleSendMessage()
+    }
+  }
+
+  const handleRequestAgent = async () => {
+    const agentRequestMessage = "I need to speak with an agent"
+    const userMessage: Message = {
+      id: Date.now().toString(),
+      content: agentRequestMessage,
+      role: 'user',
+      timestamp: new Date()
+    }
+
+    setMessages(prev => [...prev, userMessage])
+    setIsLoading(true)
+
+    try {
+      const response = await chatAPI.sendMessage({
+        content: agentRequestMessage,
+        sessionId,
+        model: 'openai'
+      })
+
+      const assistantMessage: Message = {
+        id: (Date.now() + 1).toString(),
+        content: response.data.content || response.data.message || 'Sorry, I could not process your request.',
+        role: 'assistant',
+        timestamp: new Date(),
+        type: response.data.type || 'text',
+        handoffRequest: response.data.handoffRequest
+      }
+
+      // Handle handoff creation
+      if (response.data.type === 'handoff_created' && response.data.handoffRequest) {
+        setHandoffStatus('pending')
+        setCurrentHandoffId(response.data.handoffRequest.id)
+        console.log('🤝 Handoff request created:', response.data.handoffRequest.id)
+      }
+
+      setMessages(prev => [...prev, assistantMessage])
+    } catch (error) {
+      console.error('Agent request error:', error)
+      const errorMessage: Message = {
+        id: (Date.now() + 1).toString(),
+        content: 'Sorry, I\'m having trouble connecting to an agent right now. Please try again later.',
+        role: 'assistant',
+        timestamp: new Date()
+      }
+      setMessages(prev => [...prev, errorMessage])
+      toast.error('Failed to request agent')
+    } finally {
+      setIsLoading(false)
     }
   }
 
@@ -252,8 +364,19 @@ const ChatWidget: React.FC<ChatWidgetProps> = ({
           <div className="flex items-center justify-between p-5 border-b border-gray-200 dark:border-gray-700 bg-blue-600 text-white rounded-t-lg">
             <div className="flex items-center space-x-3">
               <Bot className="w-6 h-6" />
-              <h3 className="font-semibold text-base">{title}</h3>
-              <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
+              <div>
+                <h3 className="font-semibold text-base">{handoffStatus === 'pending' ? 'Connecting to Agent...' : title}</h3>
+                {handoffStatus === 'pending' && (
+                  <div className="text-xs text-blue-200">Agent request pending</div>
+                )}
+              </div>
+              {handoffStatus === 'pending' ? (
+                <div className="w-2 h-2 bg-yellow-400 rounded-full animate-pulse"></div>
+              ) : handoffStatus === 'accepted' ? (
+                <div className="w-2 h-2 bg-green-400 rounded-full"></div>
+              ) : (
+                <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
+              )}
             </div>
             <div className="flex items-center space-x-2">
               <button
@@ -290,6 +413,26 @@ const ChatWidget: React.FC<ChatWidgetProps> = ({
                       }`}
                     >
                       <p className="text-sm leading-relaxed whitespace-pre-wrap">{message.content}</p>
+                      
+                      {/* Handoff Status Card */}
+                      {message.type === 'handoff_created' && message.handoffRequest && (
+                        <div className="mt-3 p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg">
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <div className="text-xs font-medium text-blue-700 dark:text-blue-300">Agent Request #{message.handoffRequest.id.slice(-6)}</div>
+                              <div className="text-xs text-blue-600 dark:text-blue-400">
+                                Priority: {message.handoffRequest.priority} | 
+                                Queue: #{message.handoffRequest.queuePosition} | 
+                                Est. wait: {Math.ceil(message.handoffRequest.estimatedWaitTime / 60)}min
+                              </div>
+                            </div>
+                            <div className="flex items-center">
+                              <div className="w-2 h-2 bg-yellow-400 rounded-full animate-pulse mr-2"></div>
+                              <span className="text-xs text-yellow-700 dark:text-yellow-300 font-medium">Pending</span>
+                            </div>
+                          </div>
+                        </div>
+                      )}
                       
                       {/* Message Actions for Assistant Messages */}
                       {message.role === 'assistant' && (
@@ -371,25 +514,52 @@ const ChatWidget: React.FC<ChatWidgetProps> = ({
 
               {/* Input */}
               <div className="p-5 border-t border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 rounded-b-lg">
-                <div className="flex space-x-3">
-                  <input
-                    ref={inputRef}
-                    type="text"
-                    value={inputMessage}
-                    onChange={(e) => setInputMessage(e.target.value)}
-                    onKeyPress={handleKeyPress}
-                    placeholder={placeholder}
-                    disabled={isLoading}
-                    className="flex-1 px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-800 dark:text-white text-sm resize-none"
-                  />
-                  <button
-                    onClick={handleSendMessage}
-                    disabled={!inputMessage.trim() || isLoading}
-                    className="px-4 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center min-w-[48px] shadow-sm"
-                    aria-label="Send message"
-                  >
-                    <Send className="w-5 h-5" />
-                  </button>
+                {/* Handoff Status Notification */}
+                {handoffStatus === 'pending' && (
+                  <div className="mb-3 p-3 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg">
+                    <div className="flex items-center space-x-2">
+                      <Clock className="w-4 h-4 text-yellow-600 dark:text-yellow-400" />
+                      <span className="text-sm text-yellow-700 dark:text-yellow-300">
+                        Your request for an agent is pending. You'll be connected shortly.
+                      </span>
+                    </div>
+                  </div>
+                )}
+                
+                <div className="flex space-x-2">
+                  <div className="flex-1 flex space-x-2">
+                    <input
+                      ref={inputRef}
+                      type="text"
+                      value={inputMessage}
+                      onChange={(e) => setInputMessage(e.target.value)}
+                      onKeyPress={handleKeyPress}
+                      placeholder={placeholder}
+                      disabled={isLoading}
+                      className="flex-1 px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-800 dark:text-white text-sm resize-none"
+                    />
+                    <button
+                      onClick={handleSendMessage}
+                      disabled={!inputMessage.trim() || isLoading}
+                      className="px-4 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center min-w-[48px] shadow-sm"
+                      aria-label="Send message"
+                    >
+                      <Send className="w-5 h-5" />
+                    </button>
+                  </div>
+                  
+                  {/* Connect to Agent Button */}
+                  {handoffStatus === 'none' && (
+                    <button
+                      onClick={handleRequestAgent}
+                      disabled={isLoading}
+                      className="px-3 py-3 bg-green-100 text-green-700 hover:bg-green-200 dark:bg-green-900/20 dark:text-green-400 dark:hover:bg-green-900/30 rounded-lg transition-colors flex items-center justify-center min-w-[48px] shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                      title="Connect to an agent"
+                      aria-label="Request agent assistance"
+                    >
+                      <Users className="w-5 h-5" />
+                    </button>
+                  )}
                 </div>
               </div>
             </>

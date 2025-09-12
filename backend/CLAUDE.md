@@ -1,1 +1,2 @@
 - check if all the implementations are done considering that the data is to be saved in mongoDB "chatbot_ai"
+- when implementing any functionality where data is saved in MongoDB, need to make sure that this DB is used "chatbot_ai"

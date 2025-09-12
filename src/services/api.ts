@@ -97,6 +97,9 @@ export const chatAPI = {
   
   getHistory: (sessionId: string) =>
     api.get(`/chat/history/${sessionId}`),
+    
+  getHandoffStatus: (handoffId: string) =>
+    api.get(`/handoffs/${handoffId}`),
 }
 
 // Integrations API

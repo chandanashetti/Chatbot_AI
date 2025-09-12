@@ -122,6 +122,13 @@ const AgentManagement = () => {
   useEffect(() => {
     loadData();
     loadUsers();
+    
+    // Set up polling for real-time handoff updates
+    const interval = setInterval(() => {
+      loadData();
+    }, 10000); // Poll every 10 seconds for handoff requests
+
+    return () => clearInterval(interval);
   }, [statusFilter, searchTerm]);
 
   const loadUsers = async () => {

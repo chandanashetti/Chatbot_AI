@@ -967,13 +967,140 @@ app.post('/api/openai/test', async (req, res) => {
   }
 });
 
+// Helper function to check if user is requesting agent handoff
+const detectHandoffRequest = (message) => {
+  const handoffKeywords = [
+    'connect me to an agent', 'talk to agent', 'speak to agent', 'human agent', 
+    'contact agent', 'transfer to agent', 'live agent', 'real person',
+    'help from agent', 'agent help', 'customer service', 'customer support',
+    'support agent', 'live support', 'human support', 'escalate',
+    'talk to someone', 'speak to someone', 'human help'
+  ];
+  
+  const normalizedMessage = message.toLowerCase().trim();
+  return handoffKeywords.some(keyword => normalizedMessage.includes(keyword));
+};
+
+// Helper function to create handoff request
+const createHandoffRequest = async (sessionData, userMessage, req) => {
+  try {
+    const HandoffRequest = require('./models/HandoffRequest');
+    const BotConversation = require('./models/BotConversation');
+    
+    // Create or get bot conversation
+    let botConversation = await BotConversation.findOne({ 
+      sessionId: sessionData.sessionId 
+    });
+    
+    if (!botConversation) {
+      botConversation = new BotConversation({
+        sessionId: sessionData.sessionId,
+        userId: sessionData.userId || sessionData.sessionId,
+        userName: sessionData.userName || 'Chat User',
+        platform: 'web',
+        startTime: new Date(),
+        messages: []
+      });
+      await botConversation.save();
+    }
+    
+    // Check if there's already a pending handoff request
+    const existingHandoff = await HandoffRequest.findOne({
+      conversationId: botConversation._id,
+      status: { $in: ['pending', 'assigned'] }
+    });
+    
+    if (existingHandoff) {
+      return existingHandoff;
+    }
+    
+    // Create new handoff request
+    const handoffRequest = new HandoffRequest({
+      conversationId: botConversation._id,
+      botId: new mongoose.Types.ObjectId(), // You can link to specific bot if needed
+      userId: sessionData.userId || sessionData.sessionId,
+      userName: sessionData.userName || 'Chat User',
+      userEmail: sessionData.userEmail || null,
+      platform: 'web',
+      reason: userMessage,
+      category: 'general',
+      priority: 'medium',
+      urgency: 'medium',
+      status: 'pending',
+      aiConfidence: 0.5,
+      context: {
+        currentPage: req.headers.referer || 'unknown',
+        userAgent: req.headers['user-agent'] || 'unknown',
+        lastMessages: sessionData.messages ? sessionData.messages.slice(-5) : []
+      },
+      requestedAt: new Date(),
+      estimatedWaitTime: 300, // 5 minutes default
+      queuePosition: 0
+    });
+    
+    await handoffRequest.save();
+    
+    // Update queue positions
+    await HandoffRequest.updateQueuePositions();
+    
+    console.log(`🤝 Created handoff request for session ${sessionData.sessionId}`);
+    return handoffRequest;
+    
+  } catch (error) {
+    console.error('Error creating handoff request:', error);
+    throw error;
+  }
+};
+
 // Regular chat endpoint with RAG support (primary endpoint for frontend)
 app.post('/api/chat/send', upload.array('attachments'), async (req, res) => {
   try {
-    const { content, model = 'openai', useRAG = 'true' } = req.body;
+    const { content, model = 'openai', useRAG = 'true', sessionId } = req.body;
     
     if (!content) {
       return res.status(400).json({ error: 'Content is required' });
+    }
+    
+    // Check if user is requesting agent handoff
+    if (detectHandoffRequest(content)) {
+      try {
+        console.log('🤝 Agent handoff request detected:', content);
+        
+        const sessionData = {
+          sessionId: sessionId || `session-${Date.now()}`,
+          userId: sessionId || `user-${Date.now()}`,
+          userName: 'Chat User'
+        };
+        
+        const handoffRequest = await createHandoffRequest(sessionData, content, req);
+        
+        return res.json({
+          content: `I understand you'd like to speak with a human agent. I've created a support request for you. 
+
+📋 **Request Details:**
+- Request ID: ${handoffRequest._id}
+- Priority: ${handoffRequest.priority}
+- Estimated Wait Time: ${Math.ceil(handoffRequest.estimatedWaitTime / 60)} minutes
+
+An agent will be with you shortly. Please stay on this chat - they'll respond here when available.
+
+Is there anything else I can help you with while you wait?`,
+          type: 'handoff_created',
+          handoffRequest: {
+            id: handoffRequest._id,
+            status: handoffRequest.status,
+            priority: handoffRequest.priority,
+            estimatedWaitTime: handoffRequest.estimatedWaitTime,
+            queuePosition: handoffRequest.queuePosition
+          }
+        });
+        
+      } catch (error) {
+        console.error('Error processing handoff request:', error);
+        return res.json({
+          content: "I understand you'd like to speak with an agent. I'm having trouble processing your request right now, but let me try to help you directly. What specific issue can I assist you with?"
+        });
+      }
     }
     
     // Get settings for RAG and OpenAI configuration
