@@ -1,6 +1,6 @@
 import { createSlice, PayloadAction } from '@reduxjs/toolkit'
 
-export type UserRole = 'superadmin' | 'admin' | 'manager' | 'operator' | 'viewer' | 'agent'
+export type UserRole = 'superadministrator' | 'admin' | 'manager' | 'operator' | 'viewer' | 'agent'
 export type UserStatus = 'active' | 'inactive' | 'pending' | 'suspended'
 
 export interface Permission {
@@ -124,7 +124,7 @@ const getDefaultPermissions = (role: UserRole): UserPermissions => {
   }
 
   switch (role) {
-    case 'superadmin':
+    case 'superadministrator':
       return {
         dashboard: { view: true, export: true },
         users: { view: true, create: true, edit: true, delete: true, manageRoles: true },
@@ -179,6 +179,17 @@ const getDefaultPermissions = (role: UserRole): UserPermissions => {
         settings: { view: false, edit: false, system: false },
         chat: { view: true, moderate: false, export: false }
       }
+    case 'agent':
+      return {
+        dashboard: { view: true, export: false },
+        users: { view: false, create: false, edit: false, delete: false, manageRoles: false },
+        integrations: { view: false, create: false, edit: false, delete: false, test: false },
+        knowledgeBase: { view: true, upload: false, edit: false, delete: false, reindex: false },
+        analytics: { view: true, export: false, advanced: false },
+        logs: { view: true, export: false, delete: false },
+        settings: { view: false, edit: false, system: false },
+        chat: { view: true, moderate: true, export: false }
+      }
     default:
       return basePermissions
   }
@@ -190,9 +201,9 @@ const initialState: UserState = {
       id: '1',
       email: 'admin@chatbot.ai',
       name: 'System Administrator',
-      role: 'superadmin',
+      role: 'superadministrator',
       status: 'active',
-      permissions: getDefaultPermissions('superadmin'),
+      permissions: getDefaultPermissions('superadministrator'),
       createdAt: new Date('2024-01-01'),
       updatedAt: new Date(),
       department: 'IT',

@@ -50,67 +50,67 @@ export const usePermissions = (): PermissionCheck => {
     // Define resource access rules
     const accessRules: Record<string, UserRole[]> = {
       // Dashboard access
-      'dashboard': ['superadmin', 'admin', 'manager', 'operator', 'viewer'],
-      'dashboard.export': ['superadmin', 'admin', 'manager'],
+      'dashboard': ['superadministrator', 'admin', 'manager', 'operator', 'viewer', 'agent'],
+      'dashboard.export': ['superadministrator', 'admin', 'manager'],
       
       // User management
-      'users': ['superadmin', 'admin'],
-      'users.create': ['superadmin', 'admin'],
-      'users.edit': ['superadmin', 'admin'],
-      'users.delete': ['superadmin'],
-      'users.roles': ['superadmin'],
+      'users': ['superadministrator', 'admin'],
+      'users.create': ['superadministrator', 'admin'],
+      'users.edit': ['superadministrator', 'admin'],
+      'users.delete': ['superadministrator'],
+      'users.roles': ['superadministrator'],
       
       // Integrations
-      'integrations': ['superadmin', 'admin', 'manager'],
-      'integrations.create': ['superadmin', 'admin'],
-      'integrations.edit': ['superadmin', 'admin'],
-      'integrations.delete': ['superadmin', 'admin'],
-      'integrations.test': ['superadmin', 'admin', 'manager'],
+      'integrations': ['superadministrator', 'admin', 'manager'],
+      'integrations.create': ['superadministrator', 'admin'],
+      'integrations.edit': ['superadministrator', 'admin'],
+      'integrations.delete': ['superadministrator', 'admin'],
+      'integrations.test': ['superadministrator', 'admin', 'manager'],
       
       // Knowledge Base
-      'knowledgeBase': ['superadmin', 'admin', 'manager', 'operator', 'viewer'],
-      'knowledgeBase.upload': ['superadmin', 'admin', 'manager', 'operator'],
-      'knowledgeBase.edit': ['superadmin', 'admin', 'manager'],
-      'knowledgeBase.delete': ['superadmin', 'admin'],
-      'knowledgeBase.reindex': ['superadmin', 'admin', 'manager'],
+      'knowledgeBase': ['superadministrator', 'admin', 'manager', 'operator', 'viewer', 'agent'],
+      'knowledgeBase.upload': ['superadministrator', 'admin', 'manager', 'operator'],
+      'knowledgeBase.edit': ['superadministrator', 'admin', 'manager'],
+      'knowledgeBase.delete': ['superadministrator', 'admin'],
+      'knowledgeBase.reindex': ['superadministrator', 'admin', 'manager'],
       
       // Analytics
-      'analytics': ['superadmin', 'admin', 'manager', 'operator', 'viewer'],
-      'analytics.export': ['superadmin', 'admin', 'manager'],
-      'analytics.advanced': ['superadmin', 'admin', 'manager'],
+      'analytics': ['superadministrator', 'admin', 'manager', 'operator', 'viewer', 'agent'],
+      'analytics.export': ['superadministrator', 'admin', 'manager'],
+      'analytics.advanced': ['superadministrator', 'admin', 'manager'],
       
       // Logs
-      'logs': ['superadmin', 'admin', 'manager', 'operator', 'viewer'],
-      'logs.export': ['superadmin', 'admin', 'manager'],
-      'logs.delete': ['superadmin', 'admin'],
+      'logs': ['superadministrator', 'admin', 'manager', 'operator', 'viewer', 'agent'],
+      'logs.export': ['superadministrator', 'admin', 'manager'],
+      'logs.delete': ['superadministrator', 'admin'],
       
       // Settings
-      'settings': ['superadmin', 'admin', 'manager'],
-      'settings.edit': ['superadmin', 'admin'],
-      'settings.system': ['superadmin'],
+      'settings': ['superadministrator', 'admin', 'manager'],
+      'settings.edit': ['superadministrator', 'admin'],
+      'settings.system': ['superadministrator'],
       
       // Chat management
-      'chat': ['superadmin', 'admin', 'manager', 'operator', 'viewer'],
-      'chat.moderate': ['superadmin', 'admin', 'manager'],
-      'chat.export': ['superadmin', 'admin', 'manager'],
+      'chat': ['superadministrator', 'admin', 'manager', 'operator', 'viewer', 'agent'],
+      'chat.moderate': ['superadministrator', 'admin', 'manager', 'agent'],
+      'chat.export': ['superadministrator', 'admin', 'manager'],
       
       // Agent management (Admin view)
-      'agents': ['superadmin', 'admin'],
-      'agents.create': ['superadmin', 'admin'],
-      'agents.edit': ['superadmin', 'admin'],
-      'agents.delete': ['superadmin', 'admin'],
+      'agents': ['superadministrator', 'admin'],
+      'agents.create': ['superadministrator', 'admin'],
+      'agents.edit': ['superadministrator', 'admin'],
+      'agents.delete': ['superadministrator', 'admin'],
       
       // Agent dashboard and chat (Agent view)
-      'agent:view': ['superadmin', 'admin', 'agent'],
-      'agent:chat': ['superadmin', 'admin', 'agent'],
-      'agent:manage': ['superadmin', 'admin'],
-      'agent:handoff': ['superadmin', 'admin', 'agent'],
-      'agent:escalate': ['superadmin', 'admin', 'agent'],
-      'agent:notes': ['superadmin', 'admin', 'agent'],
+      'agent:view': ['superadministrator', 'admin', 'agent'],
+      'agent:chat': ['superadministrator', 'admin', 'agent'],
+      'agent:manage': ['superadministrator', 'admin'],
+      'agent:handoff': ['superadministrator', 'admin', 'agent'],
+      'agent:escalate': ['superadministrator', 'admin', 'agent'],
+      'agent:notes': ['superadministrator', 'admin', 'agent'],
       
       // Chat review
-      'chatReview': ['superadmin', 'admin', 'manager'],
-      'chatReview.export': ['superadmin', 'admin', 'manager']
+      'chatReview': ['superadministrator', 'admin', 'manager'],
+      'chatReview.export': ['superadministrator', 'admin', 'manager']
     }
     
     const allowedRoles = accessRules[resource]
@@ -122,8 +122,8 @@ export const usePermissions = (): PermissionCheck => {
     hasRole,
     hasAnyRole,
     canAccess,
-    isAdmin: currentRole === 'admin' || currentRole === 'superadmin',
-    isSuperAdmin: currentRole === 'superadmin',
+    isAdmin: currentRole === 'admin' || currentRole === 'superadministrator',
+    isSuperAdmin: currentRole === 'superadministrator',
     currentRole,
     permissions
   }

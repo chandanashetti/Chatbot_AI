@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useSelector } from 'react-redux';
 import {
   MessageSquare,
   Clock,
@@ -11,6 +12,7 @@ import {
 } from 'lucide-react';
 import { handoffAPI, agentAPI } from '../../services/api';
 import { toast } from 'react-hot-toast';
+import { RootState } from '../../store/store';
 
 interface Agent {
   _id: string;
@@ -50,6 +52,8 @@ interface HandoffRequest {
 }
 
 const AgentDashboard = () => {
+  const { user } = useSelector((state: RootState) => state.auth);
+
   // State management
   const [agent, setAgent] = useState<Agent | null>(null);
   const [handoffRequests, setHandoffRequests] = useState<HandoffRequest[]>([]);
@@ -57,62 +61,120 @@ const AgentDashboard = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // For demo purposes, we'll use a mock agent ID
-  // In real implementation, this would come from authentication
-  const currentAgentId = '507f1f77bcf86cd799439011'; // Mock agent ID
+  // Get current agent ID from authenticated user
+  const currentAgentId = user?.id || null;
 
   // Load data on component mount
   useEffect(() => {
     loadAgentData();
     loadHandoffRequests();
-    
+
     // Set up polling for real-time updates
-    const interval = setInterval(() => {
+    const handoffInterval = setInterval(() => {
       loadHandoffRequests();
     }, 30000); // Poll every 30 seconds
 
-    return () => clearInterval(interval);
-  }, []);
+    // Set up heartbeat to keep agent online
+    const heartbeatInterval = setInterval(async () => {
+      if (currentAgentId) {
+        try {
+          await agentAPI.updateHeartbeat();
+          console.log('💗 Heartbeat sent');
+        } catch (error) {
+          console.warn('⚠️ Heartbeat failed:', error);
+        }
+      }
+    }, 60000); // Heartbeat every minute
+
+    // Set agent offline when component unmounts (browser closes/navigates away)
+    const handleBeforeUnload = async () => {
+      if (currentAgentId) {
+        try {
+          await agentAPI.setOffline();
+          console.log('👋 Agent set offline on page unload');
+        } catch (error) {
+          console.warn('⚠️ Failed to set agent offline:', error);
+        }
+      }
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+
+    return () => {
+      clearInterval(handoffInterval);
+      clearInterval(heartbeatInterval);
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+
+      // Try to set offline on cleanup
+      if (currentAgentId) {
+        agentAPI.setOffline().catch(console.warn);
+      }
+    };
+  }, [currentAgentId]);
 
   const loadAgentData = async () => {
+    if (!currentAgentId) {
+      console.warn('⚠️ No agent ID available - user may not be logged in');
+      setError('Please log in to access the agent dashboard');
+      return;
+    }
+
     try {
-      console.log('📋 Loading agent data...');
-      // For demo, we'll create a mock agent since we don't have authentication yet
-      const mockAgent: Agent = {
-        _id: currentAgentId,
-        name: 'Sarah Johnson',
-        email: 'sarah@company.com',
-        phone: '+1 (555) 123-4567',
-        status: 'available',
-        availability: {
-          isOnline: true,
-          lastSeen: new Date(),
-          maxConcurrentChats: 5
-        },
-        metrics: {
-          totalChatsHandled: 127,
-          activeChats: 2,
-          averageResponseTime: 2.5,
-          customerSatisfactionScore: 4.3,
-          ratingsCount: 45
-        }
-      };
-      
-      setAgent(mockAgent);
-      console.log('✅ Loaded agent data:', mockAgent.name);
+      console.log('📋 Loading agent data for user:', currentAgentId);
+
+      // Get current agent profile (creates if doesn't exist)
+      const response = await agentAPI.getCurrentAgent();
+      const agentData = response.data;
+
+      setAgent(agentData);
+      console.log('✅ Loaded agent data:', agentData.name);
     } catch (error: any) {
       console.error('❌ Error loading agent data:', error);
-      setError('Failed to load agent data');
+
+      // Fall back to user data if API call fails
+      if (user) {
+        const fallbackAgent: Agent = {
+          _id: currentAgentId,
+          name: user.profile?.firstName && user.profile?.lastName
+            ? `${user.profile.firstName} ${user.profile.lastName}`
+            : user.email,
+          email: user.email,
+          phone: user.profile?.phone || '',
+          status: 'available',
+          availability: {
+            isOnline: true,
+            lastSeen: new Date(),
+            maxConcurrentChats: 5
+          },
+          metrics: {
+            totalChatsHandled: 0,
+            activeChats: 0,
+            averageResponseTime: 2.5,
+            customerSatisfactionScore: 4.0,
+            ratingsCount: 0
+          }
+        };
+
+        setAgent(fallbackAgent);
+        console.log('✅ Using fallback agent data from user info');
+      } else {
+        setError('Failed to load agent data');
+      }
     }
   };
 
   const loadHandoffRequests = async () => {
+    if (!currentAgentId) {
+      console.warn('⚠️ No agent ID available for loading handoff requests');
+      return;
+    }
+
     setIsLoading(true);
     setError(null);
-    
+
     try {
-      console.log('🔄 Loading handoff requests...');
-      
+      console.log('🔄 Loading handoff requests for agent:', currentAgentId);
+
       // Load assigned requests for this agent
       const [assignedResponse, queueResponse] = await Promise.all([
         handoffAPI.getHandoffs({
@@ -130,46 +192,55 @@ const AgentDashboard = () => {
       setPendingRequests(queueResponse.data.data || []);
     } catch (error: any) {
       console.error('❌ Error loading handoff requests:', error);
-      setError(error.response?.data?.error || 'Failed to load handoff requests');
-      
-      // Set mock data for demo
-      setHandoffRequests([
-        {
-          _id: '1',
-          conversationId: 'conv1',
-          userId: 'user123',
-          userName: 'John Smith',
-          platform: 'web',
-          reason: 'Complex technical issue requiring human assistance',
-          category: 'technical',
-          priority: 'high',
-          status: 'accepted',
-          aiConfidence: 0.3,
-          queuePosition: 0,
-          estimatedWaitTime: 0,
-          createdAt: new Date(Date.now() - 300000), // 5 minutes ago
-          updatedAt: new Date()
-        }
-      ]);
-      
-      setPendingRequests([
-        {
-          _id: '2',
-          conversationId: 'conv2',
-          userId: 'user456',
-          userName: 'Lisa Wilson',
-          platform: 'whatsapp',
-          reason: 'Billing inquiry needs manual review',
-          category: 'billing',
-          priority: 'medium',
-          status: 'pending',
-          aiConfidence: 0.2,
-          queuePosition: 1,
-          estimatedWaitTime: 5,
-          createdAt: new Date(Date.now() - 600000), // 10 minutes ago
-          updatedAt: new Date()
-        }
-      ]);
+      const errorMessage = error.response?.data?.error || 'Failed to load handoff requests';
+
+      if (error.response?.status === 404) {
+        console.log('🔄 No handoff requests found, using empty arrays');
+        setHandoffRequests([]);
+        setPendingRequests([]);
+      } else {
+        setError(errorMessage);
+
+        // Set mock data for demo when there's an error
+        console.log('🔄 Using mock handoff data due to error');
+        setHandoffRequests([
+          {
+            _id: '1',
+            conversationId: 'conv1',
+            userId: 'user123',
+            userName: 'John Smith',
+            platform: 'web',
+            reason: 'Complex technical issue requiring human assistance',
+            category: 'technical',
+            priority: 'high',
+            status: 'accepted',
+            aiConfidence: 0.3,
+            queuePosition: 0,
+            estimatedWaitTime: 0,
+            createdAt: new Date(Date.now() - 300000), // 5 minutes ago
+            updatedAt: new Date()
+          }
+        ]);
+
+        setPendingRequests([
+          {
+            _id: '2',
+            conversationId: 'conv2',
+            userId: 'user456',
+            userName: 'Lisa Wilson',
+            platform: 'whatsapp',
+            reason: 'Billing inquiry needs manual review',
+            category: 'billing',
+            priority: 'medium',
+            status: 'pending',
+            aiConfidence: 0.2,
+            queuePosition: 1,
+            estimatedWaitTime: 5,
+            createdAt: new Date(Date.now() - 600000), // 10 minutes ago
+            updatedAt: new Date()
+          }
+        ]);
+      }
     } finally {
       setIsLoading(false);
     }
@@ -428,7 +499,10 @@ const AgentDashboard = () => {
                       )}
                       
                       {request.status === 'accepted' && (
-                        <button className="px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded text-xs font-medium">
+                        <button
+                          onClick={() => window.open(`/agent/chat/${request._id}`, '_blank')}
+                          className="px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded text-xs font-medium"
+                        >
                           Open Chat
                         </button>
                       )}

@@ -90,6 +90,12 @@ class WebScraper {
         console.log(`✂️ Content optimized to ${cleanContent.length} characters`);
       }
 
+      // Ensure content doesn't exceed maxContentLength to prevent memory issues
+      if (cleanContent.length > maxContentLength) {
+        console.log(`⚠️ Content still too long, truncating to ${maxContentLength} characters`);
+        cleanContent = cleanContent.substring(0, maxContentLength);
+      }
+
       const result = {
         url,
         title,

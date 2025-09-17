@@ -8,7 +8,9 @@ import {
   Activity,
   Bot,
   CheckCircle,
-  AlertCircle
+  AlertCircle,
+  Headphones,
+  Circle
 } from 'lucide-react'
 
 const Dashboard = () => {
@@ -56,6 +58,40 @@ const Dashboard = () => {
       content: 'WhatsApp API connection failed',
       time: '2 hours ago',
       status: 'error'
+    }
+  ]
+
+  // Mock data for active agents
+  const activeAgents = [
+    {
+      id: 1,
+      name: 'Sarah Johnson',
+      email: 'sarah.johnson@company.com',
+      role: 'agent',
+      status: 'online',
+      lastActive: '2 minutes ago',
+      currentChats: 3,
+      avatar: 'SJ'
+    },
+    {
+      id: 2,
+      name: 'Mike Chen',
+      email: 'mike.chen@company.com',
+      role: 'agent',
+      status: 'online',
+      lastActive: '5 minutes ago',
+      currentChats: 1,
+      avatar: 'MC'
+    },
+    {
+      id: 3,
+      name: 'Emily Davis',
+      email: 'emily.davis@company.com',
+      role: 'agent',
+      status: 'away',
+      lastActive: '15 minutes ago',
+      currentChats: 0,
+      avatar: 'ED'
     }
   ]
 
@@ -180,6 +216,84 @@ const Dashboard = () => {
             <span className="text-gray-600 dark:text-gray-400 font-medium">
               {integrations.length} total configured
             </span>
+          </div>
+        </div>
+      </div>
+
+      {/* Active Agents Section */}
+      <div className="grid grid-cols-12 gap-6 mb-8">
+        <div className="col-span-12 lg:col-span-6 card p-6">
+          <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-6 flex items-center">
+            <Headphones className="w-5 h-5 mr-2 text-primary-600" />
+            Active Agents
+          </h3>
+          <div className="space-y-4">
+            {activeAgents.map((agent) => (
+              <div key={agent.id} className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
+                <div className="flex items-center space-x-3">
+                  <div className="relative">
+                    <div className="w-10 h-10 bg-primary-100 dark:bg-primary-900/20 rounded-full flex items-center justify-center">
+                      <span className="text-sm font-semibold text-primary-600 dark:text-primary-400">
+                        {agent.avatar}
+                      </span>
+                    </div>
+                    <div className={`absolute -bottom-1 -right-1 w-4 h-4 rounded-full border-2 border-white dark:border-gray-800 ${
+                      agent.status === 'online' ? 'bg-green-500' : 
+                      agent.status === 'away' ? 'bg-yellow-500' : 'bg-gray-400'
+                    }`}></div>
+                  </div>
+                  <div>
+                    <p className="font-medium text-gray-900 dark:text-white">{agent.name}</p>
+                    <p className="text-sm text-gray-500 dark:text-gray-400">{agent.email}</p>
+                  </div>
+                </div>
+                <div className="text-right">
+                  <p className="text-sm font-medium text-gray-900 dark:text-white">
+                    {agent.currentChats} chat{agent.currentChats !== 1 ? 's' : ''}
+                  </p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">
+                    {agent.lastActive}
+                  </p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="col-span-12 lg:col-span-6 card p-6">
+          <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-6 flex items-center">
+            <Activity className="w-5 h-5 mr-2 text-primary-600" />
+            System Status
+          </h3>
+          <div className="space-y-4">
+            <div className="flex items-center justify-between p-3 bg-green-50 dark:bg-green-900/20 rounded-lg">
+              <div className="flex items-center space-x-3">
+                <Circle className="w-3 h-3 text-green-500 fill-current" />
+                <span className="font-medium text-gray-900 dark:text-white">Chatbot Service</span>
+              </div>
+              <span className="text-sm text-green-600 dark:text-green-400 font-medium">Operational</span>
+            </div>
+            <div className="flex items-center justify-between p-3 bg-green-50 dark:bg-green-900/20 rounded-lg">
+              <div className="flex items-center space-x-3">
+                <Circle className="w-3 h-3 text-green-500 fill-current" />
+                <span className="font-medium text-gray-900 dark:text-white">Database</span>
+              </div>
+              <span className="text-sm text-green-600 dark:text-green-400 font-medium">Healthy</span>
+            </div>
+            <div className="flex items-center justify-between p-3 bg-green-50 dark:bg-green-900/20 rounded-lg">
+              <div className="flex items-center space-x-3">
+                <Circle className="w-3 h-3 text-green-500 fill-current" />
+                <span className="font-medium text-gray-900 dark:text-white">API Services</span>
+              </div>
+              <span className="text-sm text-green-600 dark:text-green-400 font-medium">Running</span>
+            </div>
+            <div className="flex items-center justify-between p-3 bg-yellow-50 dark:bg-yellow-900/20 rounded-lg">
+              <div className="flex items-center space-x-3">
+                <Circle className="w-3 h-3 text-yellow-500 fill-current" />
+                <span className="font-medium text-gray-900 dark:text-white">WhatsApp Integration</span>
+              </div>
+              <span className="text-sm text-yellow-600 dark:text-yellow-400 font-medium">Maintenance</span>
+            </div>
           </div>
         </div>
       </div>

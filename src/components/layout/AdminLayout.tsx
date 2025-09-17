@@ -26,20 +26,80 @@ import {
 } from 'lucide-react'
 import { useTheme } from '../providers/ThemeProvider'
 
-// Centralized navigation config
+// Permission-based navigation config
 const NAVIGATION_CONFIG = [
-  { name: 'Dashboard', href: '/admin', icon: LayoutDashboard, roles: ['admin', 'superadmin', 'manager'] },
-  { name: 'Bot Management', href: '/admin/bots', icon: Bot, roles: ['admin', 'superadmin'] },
-  { name: 'Integrations', href: '/admin/integrations', icon: MessageSquare, roles: ['admin', 'superadmin'] },
-  { name: 'Agent Management', href: '/admin/agents', icon: Headphones, roles: ['admin', 'superadmin'] },
-  { name: 'Chat Review', href: '/admin/chats', icon: History, roles: ['admin', 'superadmin', 'manager'] },
-  { name: 'Customer Management', href: '/admin/tickets', icon: Ticket, roles: ['admin', 'superadmin', 'manager'] },
-  { name: 'User Management', href: '/admin/users', icon: User, roles: ['admin', 'superadmin'] },
-  { name: 'Role Management', href: '/admin/roles', icon: Shield, roles: ['admin', 'superadmin'] },
-  { name: 'Analytics', href: '/admin/analytics', icon: BarChart3, roles: ['admin', 'superadmin', 'manager'] },
-  { name: 'Knowledge Base', href: '/admin/knowledge-base', icon: FileText, roles: ['admin', 'superadmin', 'manager'] },
-  { name: 'Logs', href: '/admin/logs', icon: List, roles: ['admin', 'superadmin'] },
-  { name: 'Settings', href: '/admin/settings', icon: Settings, roles: ['admin', 'superadmin'] },
+  {
+    name: 'Dashboard',
+    href: '/admin',
+    icon: LayoutDashboard,
+    permission: { module: 'dashboard', action: 'view' }
+  },
+  {
+    name: 'Bot Management',
+    href: '/admin/bots',
+    icon: Bot,
+    permission: { module: 'bots', action: 'view' }
+  },
+  {
+    name: 'Integrations',
+    href: '/admin/integrations',
+    icon: MessageSquare,
+    permission: { module: 'bots', action: 'view' }
+  },
+  {
+    name: 'Agent Management',
+    href: '/admin/agents',
+    icon: Headphones,
+    permission: { module: 'agents', action: 'view' }
+  },
+  {
+    name: 'Chat Review',
+    href: '/admin/chats',
+    icon: History,
+    permission: { module: 'chat', action: 'view' }
+  },
+  {
+    name: 'Customer Management',
+    href: '/admin/tickets',
+    icon: Ticket,
+    permission: { module: 'chat', action: 'view' }
+  },
+  {
+    name: 'User Management',
+    href: '/admin/users',
+    icon: User,
+    permission: { module: 'users', action: 'view' }
+  },
+  {
+    name: 'Role Management',
+    href: '/admin/roles',
+    icon: Shield,
+    permission: { module: 'users', action: 'manageRoles' }
+  },
+  {
+    name: 'Analytics',
+    href: '/admin/analytics',
+    icon: BarChart3,
+    permission: { module: 'analytics', action: 'view' }
+  },
+  {
+    name: 'Knowledge Base',
+    href: '/admin/knowledge-base',
+    icon: FileText,
+    permission: { module: 'knowledgeBase', action: 'view' }
+  },
+  {
+    name: 'Logs',
+    href: '/admin/logs',
+    icon: List,
+    permission: { module: 'chat', action: 'view' }
+  },
+  {
+    name: 'Settings',
+    href: '/admin/settings',
+    icon: Settings,
+    permission: { module: 'settings', action: 'view' }
+  },
 ]
 
 const AdminLayout: React.FC = () => {
@@ -49,13 +109,16 @@ const AdminLayout: React.FC = () => {
   const { isDark, toggleTheme } = useTheme()
   const [sidebarOpen, setSidebarOpen] = useState(false)
 
-  const role = user?.role || 'admin' // Default role if missing
+  const userPermissions = user?.permissions || {}
 
-  // Filter navigation based on role
-  const navigation = useMemo(
-    () => NAVIGATION_CONFIG.filter(item => item.roles.includes(role)),
-    [role]
-  )
+  // Filter navigation based on permissions
+  const navigation = useMemo(() => {
+    return NAVIGATION_CONFIG.filter(item => {
+      if (!item.permission) return true // Always show items without permission requirements
+      const { module, action } = item.permission
+      return userPermissions[module]?.[action] === true
+    })
+  }, [userPermissions])
 
   const handleLogout = useCallback(() => {
     dispatch(logout())
@@ -159,7 +222,9 @@ const AdminLayout: React.FC = () => {
               </div>
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-semibold text-slate-900 dark:text-slate-100 truncate">
-                  {user?.name || 'Admin User'}
+                  {user?.profile?.firstName && user?.profile?.lastName 
+                    ? `${user.profile.firstName} ${user.profile.lastName}`
+                    : user?.email || 'Admin User'}
                 </p>
                 <p className="text-xs text-slate-600 dark:text-slate-400 truncate">
                   {user?.email || 'admin@example.com'}
@@ -201,7 +266,7 @@ const AdminLayout: React.FC = () => {
               <div className="flex items-center space-x-2">
                 <Sparkles className="w-5 h-5 text-primary-600" />
                 <span className="text-sm font-medium text-slate-600 dark:text-slate-400">
-                  Welcome back, {user?.name?.split(' ')[0] || 'Admin'}
+                  Welcome back, {user?.profile?.firstName || 'Admin'}
                 </span>
               </div>
             </div>

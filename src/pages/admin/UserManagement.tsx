@@ -15,7 +15,6 @@ import {
   AlertTriangle,
   CheckCircle,
   Key,
-  EyeOff,
   X
 } from 'lucide-react';
 import { toast } from 'react-hot-toast';
@@ -111,7 +110,6 @@ const UserManagement = () => {
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [showPasswordModal, setShowPasswordModal] = useState(false);
-  const [showPasswordFields, setShowPasswordFields] = useState(false);
 
   // Password form state
   const [passwordForm, setPasswordForm] = useState({
@@ -163,6 +161,7 @@ const UserManagement = () => {
   useEffect(() => {
     loadRoles();
   }, []);
+
 
   const loadData = useCallback(async () => {
     setIsLoading(true);
@@ -270,7 +269,7 @@ const UserManagement = () => {
 
   const getRoleIcon = (role: string) => {
     switch (role) {
-      case 'superadmin': return <Crown className="w-4 h-4 text-purple-600" />;
+      case 'superadministrator': return <Crown className="w-4 h-4 text-purple-600" />;
       case 'admin': return <Shield className="w-4 h-4 text-blue-600" />;
       case 'manager': return <Star className="w-4 h-4 text-orange-600" />;
       case 'agent': return <Users className="w-4 h-4 text-green-600" />;
@@ -356,6 +355,92 @@ const UserManagement = () => {
     } catch (error: any) {
       console.error('Error updating password:', error);
       toast.error(error.response?.data?.message || 'Failed to update password');
+    }
+  };
+
+  const handleCreateUserSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    // Validate required fields
+    if (!createUserForm.email || !createUserForm.profile.firstName || !createUserForm.profile.lastName) {
+      toast.error('Please fill in all required fields');
+      return;
+    }
+
+    // Validate email format
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(createUserForm.email)) {
+      toast.error('Please enter a valid email address');
+      return;
+    }
+
+    // Validate password if setting manually
+    if (createUserForm.setPassword) {
+      if (!createUserForm.password || !createUserForm.confirmPassword) {
+        toast.error('Password and confirm password are required when setting password manually');
+        return;
+      }
+      
+      if (createUserForm.password !== createUserForm.confirmPassword) {
+        toast.error('Passwords do not match');
+        return;
+      }
+
+      const validation = validatePassword(createUserForm.password);
+      if (!validation.isValid) {
+        toast.error(validation.errors.join(', '));
+        return;
+      }
+    }
+
+    try {
+      const userData = {
+        email: createUserForm.email,
+        username: createUserForm.username || undefined,
+        password: createUserForm.setPassword ? createUserForm.password : undefined,
+        role: createUserForm.role,
+        profile: {
+          firstName: createUserForm.profile.firstName,
+          lastName: createUserForm.profile.lastName,
+          phone: createUserForm.profile.phone || undefined,
+          department: createUserForm.profile.department || undefined,
+          jobTitle: createUserForm.profile.jobTitle || undefined,
+          timezone: createUserForm.profile.timezone,
+          language: createUserForm.profile.language
+        },
+        sendInvite: !createUserForm.setPassword // Send invite if not setting password manually
+      };
+
+      await userAPI.createUser(userData);
+      
+      toast.success(`User created successfully${createUserForm.setPassword ? '' : '. Invitation email sent.'}`);
+      
+      // Reset form and close modal
+      setCreateUserForm({
+        email: '',
+        username: '',
+        password: '',
+        confirmPassword: '',
+        role: 'viewer',
+        profile: {
+          firstName: '',
+          lastName: '',
+          phone: '',
+          department: '',
+          jobTitle: '',
+          timezone: 'UTC',
+          language: 'en'
+        },
+        sendInvitation: true,
+        setPassword: false
+      });
+      setShowCreateModal(false);
+      
+      // Reload data to show new user
+      loadData();
+    } catch (error: any) {
+      console.error('❌ Error creating user:', error);
+      toast.error(error.response?.data?.error?.message || 'Failed to create user');
     }
   };
 
@@ -458,7 +543,7 @@ const UserManagement = () => {
               <div className="ml-4">
                 <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Admins</p>
                 <p className="text-2xl font-bold text-gray-900 dark:text-white">
-                  {(userStats.roleDistribution.admin || 0) + (userStats.roleDistribution.superadmin || 0)}
+                  {(userStats.roleDistribution.admin || 0) + (userStats.roleDistribution.superadministrator || 0)}
                 </p>
               </div>
             </div>
@@ -778,7 +863,7 @@ const UserManagement = () => {
                   }}
                   className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
                 >
-                  <Trash2 className="w-6 h-6" />
+                  <X className="w-6 h-6" />
                 </button>
               </div>
 
@@ -800,7 +885,6 @@ const UserManagement = () => {
                             password: '',
                             confirmPassword: ''
                           }));
-                          setShowPasswordFields(e.target.checked);
                         }}
                         className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500"
                       />
@@ -1078,7 +1162,7 @@ const UserManagement = () => {
                   }}
                   className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
                 >
-                  <Trash2 className="w-6 h-6" />
+                  <X className="w-6 h-6" />
                 </button>
               </div>
 

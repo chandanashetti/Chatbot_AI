@@ -123,10 +123,10 @@ const AgentManagement = () => {
     loadData();
     loadUsers();
     
-    // Set up polling for real-time handoff updates
+    // Set up polling for real-time agent status and handoff updates
     const interval = setInterval(() => {
       loadData();
-    }, 10000); // Poll every 10 seconds for handoff requests
+    }, 5000); // Poll every 5 seconds for real-time agent status
 
     return () => clearInterval(interval);
   }, [statusFilter, searchTerm]);

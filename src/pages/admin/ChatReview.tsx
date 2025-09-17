@@ -19,16 +19,42 @@ import {
   ArrowDown
 } from 'lucide-react';
 import { TicketService } from '../../services/ticketService';
+import { channelAccountsAPI, conversationsAPI } from '../../services/api';
 import type { Ticket as TicketType } from './TicketManagement';
 import '../../styles/scrollbar.css';
 
 type Platform = 'line' | 'facebook' | 'instagram' | 'discord' | 'whatsapp' | 'telegram' | 'web' | 'other';
+
+interface ChannelAccount {
+  id: string;
+  accountId: string;
+  name: string;
+  platform: Platform;
+  details: {
+    displayName?: string;
+    username?: string;
+    profilePicture?: string;
+    verified?: boolean;
+    followerCount?: number;
+  };
+  status: 'connected' | 'disconnected' | 'error' | 'pending';
+  settings: {
+    isActive: boolean;
+  };
+  analytics: {
+    totalConversations: number;
+    totalMessages: number;
+    lastActivity?: Date;
+  };
+}
 
 interface ChatSession {
   id: string;
   userId: string;
   userName: string;
   platform: Platform;
+  channelAccount?: ChannelAccount; // Account this conversation belongs to
+  externalUserId?: string;
   startTime: Date;
   endTime: Date;
   messages: ChatMessage[];
@@ -52,6 +78,8 @@ const ChatReview = () => {
   const [dateFilter, setDateFilter] = useState<'today' | 'week' | 'month'>('week');
   const [filterHandoff, setFilterHandoff] = useState(false);
   const [selectedPlatform, setSelectedPlatform] = useState<Platform | 'all'>('all');
+  const [selectedAccount, setSelectedAccount] = useState<string>('all'); // 'all' or specific account ID
+  const [channelAccounts, setChannelAccounts] = useState<ChannelAccount[]>([]);
   const [tickets, setTickets] = useState<Map<string, TicketType>>(new Map());
   const [ticketService] = useState(new TicketService());
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -76,6 +104,199 @@ const ChatReview = () => {
     const platformConfig = platforms.find(p => p.id === platform);
     return platformConfig?.icon || MessageCircle;
   };
+
+  // Mock channel accounts data
+  const mockChannelAccounts: ChannelAccount[] = [
+    {
+      id: 'fb_page_1',
+      accountId: 'page_123456789',
+      name: 'TechCorp Official',
+      platform: 'facebook',
+      details: {
+        displayName: 'TechCorp',
+        username: '@techcorp',
+        profilePicture: '/avatars/techcorp.png',
+        verified: true,
+        followerCount: 15420
+      },
+      status: 'connected',
+      settings: { isActive: true },
+      analytics: { totalConversations: 450, totalMessages: 1240, lastActivity: new Date() }
+    },
+    {
+      id: 'fb_page_2',
+      accountId: 'page_987654321',
+      name: 'TechCorp Support',
+      platform: 'facebook',
+      details: {
+        displayName: 'TechCorp Support',
+        username: '@techcorp_support',
+        profilePicture: '/avatars/techcorp-support.png',
+        verified: false,
+        followerCount: 8320
+      },
+      status: 'connected',
+      settings: { isActive: true },
+      analytics: { totalConversations: 280, totalMessages: 890, lastActivity: new Date() }
+    },
+    {
+      id: 'fb_page_3',
+      accountId: 'page_555666777',
+      name: 'TechCorp Marketing',
+      platform: 'facebook',
+      details: {
+        displayName: 'TechCorp Marketing',
+        username: '@techcorp_marketing',
+        profilePicture: '/avatars/techcorp-marketing.png',
+        verified: true,
+        followerCount: 22100
+      },
+      status: 'connected',
+      settings: { isActive: true },
+      analytics: { totalConversations: 320, totalMessages: 980, lastActivity: new Date() }
+    },
+    {
+      id: 'fb_page_4',
+      accountId: 'page_111222333',
+      name: 'TechCorp Sales',
+      platform: 'facebook',
+      details: {
+        displayName: 'TechCorp Sales',
+        username: '@techcorp_sales',
+        profilePicture: '/avatars/techcorp-sales.png',
+        verified: false,
+        followerCount: 12500
+      },
+      status: 'connected',
+      settings: { isActive: true },
+      analytics: { totalConversations: 180, totalMessages: 650, lastActivity: new Date() }
+    },
+    {
+      id: 'fb_page_5',
+      accountId: 'page_444555666',
+      name: 'TechCorp Community',
+      platform: 'facebook',
+      details: {
+        displayName: 'TechCorp Community',
+        username: '@techcorp_community',
+        profilePicture: '/avatars/techcorp-community.png',
+        verified: true,
+        followerCount: 18900
+      },
+      status: 'connected',
+      settings: { isActive: true },
+      analytics: { totalConversations: 420, totalMessages: 1150, lastActivity: new Date() }
+    },
+    {
+      id: 'fb_page_6',
+      accountId: 'page_777888999',
+      name: 'TechCorp Events',
+      platform: 'facebook',
+      details: {
+        displayName: 'TechCorp Events',
+        username: '@techcorp_events',
+        profilePicture: '/avatars/techcorp-events.png',
+        verified: false,
+        followerCount: 9800
+      },
+      status: 'connected',
+      settings: { isActive: true },
+      analytics: { totalConversations: 150, totalMessages: 420, lastActivity: new Date() }
+    },
+    {
+      id: 'fb_page_7',
+      accountId: 'page_000111222',
+      name: 'TechCorp News',
+      platform: 'facebook',
+      details: {
+        displayName: 'TechCorp News',
+        username: '@techcorp_news',
+        profilePicture: '/avatars/techcorp-news.png',
+        verified: true,
+        followerCount: 25600
+      },
+      status: 'connected',
+      settings: { isActive: true },
+      analytics: { totalConversations: 380, totalMessages: 1100, lastActivity: new Date() }
+    },
+    {
+      id: 'fb_page_8',
+      accountId: 'page_333444555',
+      name: 'TechCorp Careers',
+      platform: 'facebook',
+      details: {
+        displayName: 'TechCorp Careers',
+        username: '@techcorp_careers',
+        profilePicture: '/avatars/techcorp-careers.png',
+        verified: false,
+        followerCount: 14200
+      },
+      status: 'connected',
+      settings: { isActive: true },
+      analytics: { totalConversations: 220, totalMessages: 780, lastActivity: new Date() }
+    },
+    {
+      id: 'fb_page_9',
+      accountId: 'page_666777888',
+      name: 'TechCorp Partners',
+      platform: 'facebook',
+      details: {
+        displayName: 'TechCorp Partners',
+        username: '@techcorp_partners',
+        profilePicture: '/avatars/techcorp-partners.png',
+        verified: true,
+        followerCount: 16800
+      },
+      status: 'connected',
+      settings: { isActive: true },
+      analytics: { totalConversations: 290, totalMessages: 850, lastActivity: new Date() }
+    },
+    {
+      id: 'fb_page_10',
+      accountId: 'page_999000111',
+      name: 'TechCorp Global',
+      platform: 'facebook',
+      details: {
+        displayName: 'TechCorp Global',
+        username: '@techcorp_global',
+        profilePicture: '/avatars/techcorp-global.png',
+        verified: true,
+        followerCount: 31200
+      },
+      status: 'connected',
+      settings: { isActive: true },
+      analytics: { totalConversations: 520, totalMessages: 1450, lastActivity: new Date() }
+    },
+    {
+      id: 'ig_account_1',
+      accountId: 'ig_111222333',
+      name: 'TechCorp',
+      platform: 'instagram',
+      details: {
+        displayName: 'TechCorp',
+        username: '@techcorp_official',
+        profilePicture: '/avatars/techcorp-ig.png',
+        verified: true,
+        followerCount: 25800
+      },
+      status: 'connected',
+      settings: { isActive: true },
+      analytics: { totalConversations: 320, totalMessages: 756, lastActivity: new Date() }
+    },
+    {
+      id: 'wa_business_1',
+      accountId: 'wa_business_456',
+      name: 'TechCorp WhatsApp',
+      platform: 'whatsapp',
+      details: {
+        displayName: 'TechCorp Business',
+        verified: true
+      },
+      status: 'connected',
+      settings: { isActive: true },
+      analytics: { totalConversations: 180, totalMessages: 520, lastActivity: new Date() }
+    }
+  ];
 
   // Mock data for demo
   const chatSessions: ChatSession[] = [
@@ -233,6 +454,8 @@ const ChatReview = () => {
       userId: 'user303',
       userName: 'David Kim',
       platform: 'facebook',
+      channelAccount: mockChannelAccounts.find(a => a.id === 'fb_page_1'),
+      externalUserId: 'fb_user_303',
       startTime: new Date(Date.now() - 2700000), // 45 minutes ago
       endTime: new Date(Date.now() - 2400000), // 40 minutes ago
       handoffOccurred: true,
@@ -413,6 +636,8 @@ const ChatReview = () => {
       userId: 'user606',
       userName: 'Priya Patel',
       platform: 'whatsapp',
+      channelAccount: mockChannelAccounts.find(a => a.id === 'wa_business_1'),
+      externalUserId: 'wa_user_606',
       startTime: new Date(Date.now() - 1200000), // 20 minutes ago
       endTime: new Date(Date.now() - 900000), // 15 minutes ago
       handoffOccurred: false,
@@ -553,6 +778,8 @@ const ChatReview = () => {
       userId: 'user808',
       userName: 'Anna Kowalski',
       platform: 'instagram',
+      channelAccount: mockChannelAccounts.find(a => a.id === 'ig_account_1'),
+      externalUserId: 'ig_user_808',
       startTime: new Date(Date.now() - 3600000), // 1 hour ago
       endTime: new Date(Date.now() - 3300000), // 55 minutes ago
       handoffOccurred: false,
@@ -670,6 +897,8 @@ const ChatReview = () => {
       userId: 'user1010',
       userName: 'Sarah Ahmed',
       platform: 'facebook',
+      channelAccount: mockChannelAccounts.find(a => a.id === 'fb_page_2'),
+      externalUserId: 'fb_user_1010',
       startTime: new Date(Date.now() - 300000), // 5 minutes ago
       endTime: new Date(Date.now() - 60000), // 1 minute ago
       handoffOccurred: false,
@@ -729,8 +958,336 @@ const ChatReview = () => {
           confidence: 0.93
         }
       ]
+    },
+    {
+      id: '14',
+      userId: 'user1111',
+      userName: 'Michael Johnson',
+      platform: 'facebook',
+      channelAccount: mockChannelAccounts.find(a => a.id === 'fb_page_3'),
+      externalUserId: 'fb_user_1111',
+      startTime: new Date(Date.now() - 1800000), // 30 minutes ago
+      endTime: new Date(Date.now() - 1500000), // 25 minutes ago
+      handoffOccurred: false,
+      satisfaction: 'positive',
+      tags: ['marketing', 'campaign'],
+      messages: [
+        {
+          id: '76',
+          timestamp: new Date(Date.now() - 1800000),
+          content: 'I saw your latest marketing campaign. Can you tell me more about the new product features?',
+          sender: 'user'
+        },
+        {
+          id: '77',
+          timestamp: new Date(Date.now() - 1790000),
+          content: 'Absolutely! Our new product includes advanced AI capabilities, real-time analytics, and seamless integrations. Would you like me to send you our detailed feature overview?',
+          sender: 'bot',
+          confidence: 0.92
+        }
+      ]
+    },
+    {
+      id: '15',
+      userId: 'user2222',
+      userName: 'Emily Davis',
+      platform: 'facebook',
+      channelAccount: mockChannelAccounts.find(a => a.id === 'fb_page_4'),
+      externalUserId: 'fb_user_2222',
+      startTime: new Date(Date.now() - 2400000), // 40 minutes ago
+      endTime: new Date(Date.now() - 2100000), // 35 minutes ago
+      handoffOccurred: true,
+      satisfaction: 'neutral',
+      tags: ['sales', 'pricing', 'handoff'],
+      messages: [
+        {
+          id: '78',
+          timestamp: new Date(Date.now() - 2400000),
+          content: 'I\'m interested in your enterprise plan. Can you provide pricing details?',
+          sender: 'user'
+        },
+        {
+          id: '79',
+          timestamp: new Date(Date.now() - 2390000),
+          content: 'I\'d be happy to help with enterprise pricing. Let me connect you with our sales team who can provide detailed pricing and customization options.',
+          sender: 'bot',
+          confidence: 0.3
+        },
+        {
+          id: '80',
+          timestamp: new Date(Date.now() - 2200000),
+          content: 'Hi Emily, this is Tom from sales. I can help you with enterprise pricing and answer any questions about our plans.',
+          sender: 'agent'
+        }
+      ]
+    },
+    {
+      id: '16',
+      userId: 'user3333',
+      userName: 'Robert Wilson',
+      platform: 'facebook',
+      channelAccount: mockChannelAccounts.find(a => a.id === 'fb_page_5'),
+      externalUserId: 'fb_user_3333',
+      startTime: new Date(Date.now() - 3600000), // 1 hour ago
+      endTime: new Date(Date.now() - 3300000), // 55 minutes ago
+      handoffOccurred: false,
+      satisfaction: 'positive',
+      tags: ['community', 'feedback'],
+      messages: [
+        {
+          id: '81',
+          timestamp: new Date(Date.now() - 3600000),
+          content: 'Great community here! I wanted to share some feedback about the new features.',
+          sender: 'user'
+        },
+        {
+          id: '82',
+          timestamp: new Date(Date.now() - 3590000),
+          content: 'Thank you for being part of our community! We love hearing feedback from our users. What specific features would you like to share feedback about?',
+          sender: 'bot',
+          confidence: 0.88
+        }
+      ]
+    },
+    {
+      id: '17',
+      userId: 'user4444',
+      userName: 'Lisa Chen',
+      platform: 'facebook',
+      channelAccount: mockChannelAccounts.find(a => a.id === 'fb_page_6'),
+      externalUserId: 'fb_user_4444',
+      startTime: new Date(Date.now() - 1200000), // 20 minutes ago
+      endTime: new Date(Date.now() - 900000), // 15 minutes ago
+      handoffOccurred: false,
+      satisfaction: 'positive',
+      tags: ['events', 'registration'],
+      messages: [
+        {
+          id: '83',
+          timestamp: new Date(Date.now() - 1200000),
+          content: 'I want to register for the upcoming webinar. Is it still available?',
+          sender: 'user'
+        },
+        {
+          id: '84',
+          timestamp: new Date(Date.now() - 1190000),
+          content: 'Yes! Our webinar "Advanced AI Integration" is still open for registration. I can help you sign up right now. What\'s your email address?',
+          sender: 'bot',
+          confidence: 0.95
+        }
+      ]
+    },
+    {
+      id: '18',
+      userId: 'user5555',
+      userName: 'James Brown',
+      platform: 'facebook',
+      channelAccount: mockChannelAccounts.find(a => a.id === 'fb_page_7'),
+      externalUserId: 'fb_user_5555',
+      startTime: new Date(Date.now() - 4800000), // 1.3 hours ago
+      endTime: new Date(Date.now() - 4500000), // 1.25 hours ago
+      handoffOccurred: false,
+      satisfaction: 'positive',
+      tags: ['news', 'updates'],
+      messages: [
+        {
+          id: '85',
+          timestamp: new Date(Date.now() - 4800000),
+          content: 'I saw the news about your latest update. When will it be available?',
+          sender: 'user'
+        },
+        {
+          id: '86',
+          timestamp: new Date(Date.now() - 4790000),
+          content: 'Great question! The update is scheduled for release next week. I can add you to our early access list if you\'d like to try it before the general release.',
+          sender: 'bot',
+          confidence: 0.91
+        }
+      ]
+    },
+    {
+      id: '19',
+      userId: 'user6666',
+      userName: 'Amanda Taylor',
+      platform: 'facebook',
+      channelAccount: mockChannelAccounts.find(a => a.id === 'fb_page_8'),
+      externalUserId: 'fb_user_6666',
+      startTime: new Date(Date.now() - 3000000), // 50 minutes ago
+      endTime: new Date(Date.now() - 2700000), // 45 minutes ago
+      handoffOccurred: false,
+      satisfaction: 'positive',
+      tags: ['careers', 'job'],
+      messages: [
+        {
+          id: '87',
+          timestamp: new Date(Date.now() - 3000000),
+          content: 'I\'m interested in the software engineer position. What are the requirements?',
+          sender: 'user'
+        },
+        {
+          id: '88',
+          timestamp: new Date(Date.now() - 2990000),
+          content: 'Excellent! For the software engineer position, we\'re looking for 3+ years of experience with React, Node.js, and cloud technologies. I can send you the full job description and application link.',
+          sender: 'bot',
+          confidence: 0.89
+        }
+      ]
+    },
+    {
+      id: '20',
+      userId: 'user7777',
+      userName: 'Daniel Martinez',
+      platform: 'facebook',
+      channelAccount: mockChannelAccounts.find(a => a.id === 'fb_page_9'),
+      externalUserId: 'fb_user_7777',
+      startTime: new Date(Date.now() - 4200000), // 1.2 hours ago
+      endTime: new Date(Date.now() - 3900000), // 1.1 hours ago
+      handoffOccurred: true,
+      satisfaction: 'neutral',
+      tags: ['partners', 'integration', 'handoff'],
+      messages: [
+        {
+          id: '89',
+          timestamp: new Date(Date.now() - 4200000),
+          content: 'We\'re a partner company and need help with API integration.',
+          sender: 'user'
+        },
+        {
+          id: '90',
+          timestamp: new Date(Date.now() - 4190000),
+          content: 'I\'ll connect you with our partner success team who specializes in API integrations and can provide dedicated support.',
+          sender: 'bot',
+          confidence: 0.2
+        },
+        {
+          id: '91',
+          timestamp: new Date(Date.now() - 4000000),
+          content: 'Hi Daniel, this is Sarah from partner success. I can help you with the API integration. What specific endpoints are you working with?',
+          sender: 'agent'
+        }
+      ]
+    },
+    {
+      id: '21',
+      userId: 'user8888',
+      userName: 'Jennifer Lee',
+      platform: 'facebook',
+      channelAccount: mockChannelAccounts.find(a => a.id === 'fb_page_10'),
+      externalUserId: 'fb_user_8888',
+      startTime: new Date(Date.now() - 600000), // 10 minutes ago
+      endTime: new Date(Date.now() - 300000), // 5 minutes ago
+      handoffOccurred: false,
+      satisfaction: 'positive',
+      tags: ['global', 'support'],
+      messages: [
+        {
+          id: '92',
+          timestamp: new Date(Date.now() - 600000),
+          content: 'I\'m from the Asia-Pacific region. Do you have local support?',
+          sender: 'user'
+        },
+        {
+          id: '93',
+          timestamp: new Date(Date.now() - 590000),
+          content: 'Yes! We have dedicated support teams in Singapore, Tokyo, and Sydney. I can connect you with the appropriate regional team based on your location.',
+          sender: 'bot',
+          confidence: 0.94
+        }
+      ]
     }
   ];
+
+  // Load channel accounts from API
+  const loadChannelAccounts = async () => {
+    try {
+      const response = await channelAccountsAPI.getChannelAccounts();
+      if (response.data.success) {
+        setChannelAccounts(response.data.data.accounts);
+      } else {
+        // Fallback to mock data if API fails
+        setChannelAccounts(mockChannelAccounts);
+      }
+    } catch (error) {
+      console.error('Error loading channel accounts:', error);
+      // Fallback to mock data
+      setChannelAccounts(mockChannelAccounts);
+    }
+  };
+
+  // Initialize channel accounts
+  useEffect(() => {
+    loadChannelAccounts();
+  }, []);
+
+  // Load conversations from API
+  const loadConversations = async () => {
+    try {
+      const params: any = {
+        platform: selectedPlatform !== 'all' ? selectedPlatform : undefined,
+        channelAccountId: selectedAccount !== 'all' ? selectedAccount : undefined,
+        status: filterHandoff ? 'handoff' : undefined,
+        page: 1,
+        limit: 100
+      };
+
+      const response = await conversationsAPI.getConversations(params);
+      if (response.data.success) {
+        // Transform API response to match our interface
+        const apiConversations = response.data.data.conversations.map((conv: any) => ({
+          id: conv._id,
+          userId: conv.userInfo?.sessionId || conv.sessionId,
+          userName: conv.userInfo?.userName || 'Unknown User',
+          platform: conv.platform,
+          channelAccount: conv.channelAccountId ? {
+            id: conv.channelAccountId._id,
+            accountId: conv.channelAccountId.accountId || conv.channelAccountId._id,
+            name: conv.channelAccountId.name,
+            platform: conv.channelAccountId.platform,
+            details: conv.channelAccountId.details || {},
+            status: 'connected',
+            settings: { isActive: true },
+            analytics: { totalConversations: 0, totalMessages: 0, lastActivity: new Date() }
+          } : undefined,
+          externalUserId: conv.externalUserId,
+          startTime: new Date(conv.createdAt),
+          endTime: new Date(conv.updatedAt),
+          messages: conv.messages?.map((msg: any) => ({
+            id: msg.id,
+            timestamp: new Date(msg.createdAt),
+            content: msg.content,
+            sender: msg.sender,
+            confidence: msg.metadata?.confidence
+          })) || [],
+          handoffOccurred: conv.status === 'handoff',
+          satisfaction: conv.metrics?.satisfactionScore > 3 ? 'positive' : 
+                       conv.metrics?.satisfactionScore < 3 ? 'negative' : 'neutral',
+          tags: []
+        }));
+        
+        // For now, we'll use a mix of API data and mock data
+        // In a real implementation, you'd replace the mock data entirely
+        setChannelAccounts(prevAccounts => {
+          // Update accounts with real data if available
+          return apiConversations.length > 0 ? 
+            [...prevAccounts, ...apiConversations.filter((conv: any) => conv.channelAccount)] :
+            prevAccounts;
+        });
+      }
+    } catch (error) {
+      console.error('Error loading conversations:', error);
+      // Continue with mock data
+    }
+  };
+
+  // Reset account filter when platform changes
+  useEffect(() => {
+    setSelectedAccount('all');
+  }, [selectedPlatform]);
+
+  // Load conversations when filters change
+  useEffect(() => {
+    loadConversations();
+  }, [selectedPlatform, selectedAccount, filterHandoff]);
 
   // Auto-create tickets for all chat sessions
   useEffect(() => {
@@ -788,9 +1345,15 @@ const ChatReview = () => {
     return () => clearInterval(interval);
   }, [tickets, chatSessions, ticketService]);
 
-  // Filter chats based on selected platform
+  // Get accounts for selected platform
+  const platformAccounts = selectedPlatform === 'all' 
+    ? channelAccounts 
+    : channelAccounts.filter(account => account.platform === selectedPlatform);
+
+  // Filter chats based on selected platform and account
   const filteredChats = chatSessions.filter(chat => {
     if (selectedPlatform !== 'all' && chat.platform !== selectedPlatform) return false;
+    if (selectedAccount !== 'all' && chat.channelAccount?.id !== selectedAccount) return false;
     if (filterHandoff && !chat.handoffOccurred) return false;
     if (searchTerm && !chat.userName.toLowerCase().includes(searchTerm.toLowerCase())) return false;
     return true;
@@ -909,6 +1472,9 @@ const ChatReview = () => {
             const chatCount = platform.id === 'all' 
               ? chatSessions.length 
               : chatSessions.filter(chat => chat.platform === platform.id).length;
+            const accountCount = platform.id === 'all' 
+              ? channelAccounts.length 
+              : channelAccounts.filter(account => account.platform === platform.id).length;
 
   return (
               <button
@@ -922,20 +1488,135 @@ const ChatReview = () => {
               >
                 <Icon className="h-5 w-5" />
                 <span className="font-medium">{platform.name}</span>
+                <div className="flex items-center space-x-1">
                 {chatCount > 0 && (
                   <span className={`px-2 py-0.5 text-xs rounded-full ${
                     isActive
                       ? 'bg-primary-100 text-primary-800 dark:bg-primary-900/20 dark:text-primary-400'
                       : 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400'
                   }`}>
-                    {chatCount}
+                      {chatCount} chats
                   </span>
                 )}
+                  {accountCount > 1 && (
+                    <span className={`px-2 py-0.5 text-xs rounded-full ${
+                      isActive
+                        ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/20 dark:text-blue-400'
+                        : 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400'
+                    }`}>
+                      {accountCount} accounts
+                    </span>
+                  )}
+                </div>
               </button>
             );
           })}
         </div>
       </div>
+
+      {/* Account Selector - Only show when platform has multiple accounts */}
+      {platformAccounts.length > 1 && (
+        <div className="border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-4 py-3">
+          <div className="flex items-center justify-between">
+          <div className="flex items-center space-x-3">
+            <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Account:</span>
+            <select
+              value={selectedAccount}
+              onChange={(e) => setSelectedAccount(e.target.value)}
+                className="text-sm border border-gray-300 dark:border-gray-600 rounded-md px-3 py-1 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary-500 min-w-[200px]"
+            >
+              <option value="all">All Accounts ({platformAccounts.length})</option>
+              {platformAccounts.map((account) => {
+                const accountChats = chatSessions.filter(chat => chat.channelAccount?.id === account.id);
+                return (
+                  <option key={account.id} value={account.id}>
+                    {account.name} ({accountChats.length} chats)
+                    {account.details.verified && ' ✓'}
+                  </option>
+                );
+              })}
+            </select>
+            </div>
+            
+            {/* Account Info Badge */}
+            {selectedAccount !== 'all' && (() => {
+              const selectedAccountData = platformAccounts.find(a => a.id === selectedAccount);
+              if (!selectedAccountData) return null;
+              
+              return (
+                <div className="flex items-center space-x-3 text-xs">
+                  <div className="flex items-center space-x-2">
+                  <span className={`px-2 py-1 rounded-full text-white ${
+                    selectedAccountData.status === 'connected' ? 'bg-green-500' :
+                    selectedAccountData.status === 'error' ? 'bg-red-500' :
+                    selectedAccountData.status === 'pending' ? 'bg-yellow-500' : 'bg-gray-500'
+                  }`}>
+                    {selectedAccountData.status}
+                  </span>
+                    {selectedAccountData.details.verified && (
+                      <span className="text-blue-500 font-medium">✓ Verified</span>
+                    )}
+                  </div>
+                  {selectedAccountData.details.username && (
+                    <span className="text-gray-600 dark:text-gray-400 font-mono">
+                      {selectedAccountData.details.username}
+                    </span>
+                  )}
+                  {selectedAccountData.details.followerCount && (
+                    <span className="text-gray-600 dark:text-gray-400">
+                      {selectedAccountData.details.followerCount.toLocaleString()} followers
+                    </span>
+                  )}
+                </div>
+              );
+            })()}
+          </div>
+          
+          {/* Account Grid - Show all accounts when "All Accounts" is selected */}
+          {selectedAccount === 'all' && (
+            <div className="mt-3 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-2">
+              {platformAccounts.map((account) => {
+                const accountChats = chatSessions.filter(chat => chat.channelAccount?.id === account.id);
+                const isActive = account.status === 'connected';
+                
+                return (
+                  <div
+                    key={account.id}
+                    className={`p-2 rounded-lg border cursor-pointer transition-colors ${
+                      isActive 
+                        ? 'bg-white dark:bg-gray-700 border-green-200 dark:border-green-800' 
+                        : 'bg-gray-100 dark:bg-gray-600 border-gray-200 dark:border-gray-500'
+                    }`}
+                    onClick={() => setSelectedAccount(account.id)}
+                  >
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-xs font-medium text-gray-900 dark:text-white truncate">
+                        {account.name}
+                      </span>
+                      <div className="flex items-center space-x-1">
+                        {account.details.verified && (
+                          <span className="text-blue-500 text-xs">✓</span>
+                        )}
+                        <span className={`w-2 h-2 rounded-full ${
+                          isActive ? 'bg-green-500' : 'bg-gray-400'
+                        }`}></span>
+                      </div>
+                    </div>
+                    <div className="text-xs text-gray-500 dark:text-gray-400">
+                      {accountChats.length} chats
+                    </div>
+                    {account.details.followerCount && (
+                      <div className="text-xs text-gray-500 dark:text-gray-400">
+                        {account.details.followerCount.toLocaleString()} followers
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
 
       <div className="flex-1 flex">
       {/* Left sidebar - Chat list */}
@@ -1002,6 +1683,9 @@ const ChatReview = () => {
                     <div className="flex items-center space-x-2">
                       <PlatformIcon className="h-4 w-4 text-primary-500" />
                   <span className="font-medium text-gray-900 dark:text-white">{chat.userName}</span>
+                      {chat.channelAccount?.details.verified && (
+                        <span className="text-blue-500 text-xs">✓</span>
+                      )}
                       {ticket && (
                         <Ticket className="h-4 w-4 text-blue-500" />
                       )}
@@ -1010,6 +1694,23 @@ const ChatReview = () => {
                     {new Date(chat.startTime).toLocaleTimeString()}
                   </span>
                 </div>
+
+                {/* Account Information */}
+                {chat.channelAccount && (
+                  <div className="flex items-center space-x-2 mb-1">
+                    <span className="text-xs px-2 py-1 rounded-full bg-blue-100 text-blue-800 dark:bg-blue-900/20 dark:text-blue-400 font-medium">
+                      {chat.channelAccount.name}
+                    </span>
+                    {chat.channelAccount.details.verified && (
+                      <span className="text-blue-500 text-xs">✓</span>
+                    )}
+                    {chat.channelAccount.details.username && (
+                      <span className="text-xs text-gray-500 dark:text-gray-400 font-mono">
+                        {chat.channelAccount.details.username}
+                      </span>
+                    )}
+                  </div>
+                )}
 
                   {/* Ticket Information */}
                   {ticket && (
@@ -1096,6 +1797,16 @@ const ChatReview = () => {
                           <span className="text-xs px-2 py-1 rounded-full bg-primary-100 text-primary-800 dark:bg-primary-900/20 dark:text-primary-400">
                             {platformConfig?.name}
                           </span>
+                          {selectedChat.channelAccount && (
+                            <>
+                              <span className="text-xs px-2 py-1 rounded-full bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-200">
+                                {selectedChat.channelAccount.name}
+                              </span>
+                              {selectedChat.channelAccount.details.verified && (
+                                <span className="text-blue-500 text-sm">✓</span>
+                              )}
+                            </>
+                          )}
                           {ticket && (
                             <>
                               <Ticket className="h-4 w-4 text-blue-500" />
@@ -1122,6 +1833,43 @@ const ChatReview = () => {
                       )} minutes
                     </span>
                   </div>
+                  
+                  {/* Account Details */}
+                  {selectedChat?.channelAccount && (
+                    <div className="mt-2 p-2 bg-gray-50 dark:bg-gray-800 rounded-lg text-sm">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <span className="font-medium text-gray-700 dark:text-gray-300">
+                            Account: {selectedChat.channelAccount.name}
+                          </span>
+                          {selectedChat.channelAccount.details.username && (
+                            <span className="text-gray-500 ml-2">
+                              {selectedChat.channelAccount.details.username}
+                            </span>
+                          )}
+                        </div>
+                        <div className="flex items-center space-x-2">
+                          {selectedChat.channelAccount.details.followerCount && (
+                            <span className="text-xs text-gray-500">
+                              {selectedChat.channelAccount.details.followerCount.toLocaleString()} followers
+                            </span>
+                          )}
+                          <span className={`px-2 py-1 text-xs rounded-full ${
+                            selectedChat.channelAccount.status === 'connected' ? 'bg-green-100 text-green-800' :
+                            selectedChat.channelAccount.status === 'error' ? 'bg-red-100 text-red-800' :
+                            'bg-yellow-100 text-yellow-800'
+                          }`}>
+                            {selectedChat.channelAccount.status}
+                          </span>
+                        </div>
+                      </div>
+                      {selectedChat.externalUserId && (
+                        <div className="mt-1 text-xs text-gray-500">
+                          External User ID: <span className="font-mono">{selectedChat.externalUserId}</span>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
                 <div className="flex items-center space-x-2">
                   {selectedChat.satisfaction === 'positive' ? (

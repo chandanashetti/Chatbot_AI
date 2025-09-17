@@ -62,6 +62,14 @@ const rolePermissionsSchema = new mongoose.Schema({
     view: { type: Boolean, default: false },
     moderate: { type: Boolean, default: false },
     export: { type: Boolean, default: false }
+  },
+
+  // Handoff management permissions
+  handoffs: {
+    view: { type: Boolean, default: false },
+    accept: { type: Boolean, default: false },
+    reject: { type: Boolean, default: false },
+    manage: { type: Boolean, default: false }
   }
 }, { _id: false });
 
@@ -263,7 +271,7 @@ roleSchema.statics.createDefaultRoles = async function() {
   const systemRoles = [
     {
       name: 'Super Administrator',
-      description: 'Full system access with all permissions',
+      description: 'Full system access with all permissions including system administration',
       type: 'system',
       priority: 1,
       color: '#DC2626',
@@ -275,14 +283,15 @@ roleSchema.statics.createDefaultRoles = async function() {
         analytics: { view: true, export: true, advanced: true },
         knowledgeBase: { view: true, upload: true, edit: true, delete: true },
         settings: { view: true, edit: true, system: true },
-        chat: { view: true, moderate: true, export: true }
+        chat: { view: true, moderate: true, export: true },
+        handoffs: { view: true, accept: true, reject: true, manage: true }
       }
     },
     {
       name: 'Administrator',
       description: 'Administrative access with limited system permissions',
       type: 'system',
-      priority: 10,
+      priority: 2,
       color: '#DC2626',
       permissions: {
         dashboard: { view: true, export: true },
@@ -292,14 +301,15 @@ roleSchema.statics.createDefaultRoles = async function() {
         analytics: { view: true, export: true, advanced: true },
         knowledgeBase: { view: true, upload: true, edit: true, delete: false },
         settings: { view: true, edit: true, system: false },
-        chat: { view: true, moderate: true, export: true }
+        chat: { view: true, moderate: true, export: true },
+        handoffs: { view: true, accept: true, reject: true, manage: true }
       }
     },
     {
       name: 'Manager',
       description: 'Management level access for team supervision',
       type: 'system',
-      priority: 20,
+      priority: 3,
       color: '#F59E0B',
       permissions: {
         dashboard: { view: true, export: false },
@@ -309,14 +319,15 @@ roleSchema.statics.createDefaultRoles = async function() {
         analytics: { view: true, export: false, advanced: false },
         knowledgeBase: { view: true, upload: true, edit: true, delete: false },
         settings: { view: true, edit: false, system: false },
-        chat: { view: true, moderate: true, export: false }
+        chat: { view: true, moderate: true, export: false },
+        handoffs: { view: true, accept: false, reject: false, manage: true }
       }
     },
     {
       name: 'Operator',
       description: 'Operational access for daily tasks',
       type: 'system',
-      priority: 50,
+      priority: 4,
       color: '#10B981',
       permissions: {
         dashboard: { view: true, export: false },
@@ -326,14 +337,15 @@ roleSchema.statics.createDefaultRoles = async function() {
         analytics: { view: true, export: false, advanced: false },
         knowledgeBase: { view: true, upload: true, edit: false, delete: false },
         settings: { view: false, edit: false, system: false },
-        chat: { view: true, moderate: false, export: false }
+        chat: { view: true, moderate: false, export: false },
+        handoffs: { view: true, accept: false, reject: false, manage: false }
       }
     },
     {
       name: 'Viewer',
       description: 'Read-only access for viewing information',
       type: 'system',
-      priority: 90,
+      priority: 5,
       color: '#6B7280',
       permissions: {
         dashboard: { view: true, export: false },
@@ -343,24 +355,26 @@ roleSchema.statics.createDefaultRoles = async function() {
         analytics: { view: true, export: false, advanced: false },
         knowledgeBase: { view: true, upload: false, edit: false, delete: false },
         settings: { view: false, edit: false, system: false },
-        chat: { view: true, moderate: false, export: false }
+        chat: { view: true, moderate: false, export: false },
+        handoffs: { view: true, accept: false, reject: false, manage: false }
       }
     },
     {
       name: 'Agent',
       description: 'Chat agent access for customer support',
       type: 'system',
-      priority: 95,
+      priority: 6,
       color: '#8B5CF6',
       permissions: {
         dashboard: { view: true, export: false },
         users: { view: false, create: false, edit: false, delete: false, manageRoles: false },
         bots: { view: false, create: false, edit: false, delete: false, publish: false },
         agents: { view: false, create: false, edit: false, delete: false, assign: false },
-        analytics: { view: false, export: false, advanced: false },
-        knowledgeBase: { view: false, upload: false, edit: false, delete: false },
+        analytics: { view: true, export: false, advanced: false },
+        knowledgeBase: { view: true, upload: false, edit: false, delete: false },
         settings: { view: false, edit: false, system: false },
-        chat: { view: true, moderate: false, export: false }
+        chat: { view: true, moderate: true, export: false },
+        handoffs: { view: true, accept: true, reject: true, manage: false }
       }
     }
   ];

@@ -1,13 +1,10 @@
 import { useState, useEffect } from 'react'
 import { useSelector, useDispatch } from 'react-redux'
 import { useNavigate } from 'react-router-dom'
-import { RootState } from '../../store/store'
+import { RootState, AppDispatch } from '../../store/store'
 import { 
   setFilters, 
-  deleteBot, 
   duplicateBot, 
-  publishBot, 
-  unpublishBot,
   publishBotAsync,
   unpublishBotAsync,
   deleteBotAsync,
@@ -40,7 +37,7 @@ import { format } from 'date-fns'
 import toast from 'react-hot-toast'
 
 const BotManagement = () => {
-  const dispatch = useDispatch()
+  const dispatch = useDispatch<AppDispatch>()
   const navigate = useNavigate()
   const { bots, filters, isLoading, error } = useSelector((state: RootState) => state.bots)
   const [showCreateModal, setShowCreateModal] = useState(false)
@@ -57,8 +54,8 @@ const BotManagement = () => {
     // Skip if bots are already loaded and this is just a filter change
     // The filtering is done client-side in the filteredBots computation
     const hasSearchFilter = filters.search && filters.search.length > 0
-    const hasTypeFilter = filters.type !== 'all'
-    const hasStatusFilter = filters.status !== 'all'
+    // const hasTypeFilter = filters.type !== 'all'
+    // const hasStatusFilter = filters.status !== 'all'
     
     // Only fetch from API if we have filters that might need server-side filtering
     // For now, we'll do all filtering client-side to prevent refreshes
@@ -301,7 +298,7 @@ const BotManagement = () => {
             {/* Bot Avatar/Icon */}
             <div className="flex items-center justify-between mb-4">
               <div className="w-12 h-12 bg-gradient-to-r from-primary-600 to-accent-600 rounded-2xl flex items-center justify-center text-white text-xl font-bold">
-                {bot.settings.appearance.avatar ? (
+                {bot.settings?.appearance?.avatar ? (
                   <img 
                     src={bot.settings.appearance.avatar} 
                     alt={bot.name} 

@@ -1,6 +1,7 @@
 const express = require('express');
 const cors = require('cors');
 const multer = require('multer');
+const cookieParser = require('cookie-parser');
 const axios = require('axios');
 const fs = require('fs-extra');
 const path = require('path');
@@ -63,6 +64,7 @@ const app = express();
 // Middleware
 app.use(cors());
 app.use(express.json());
+app.use(cookieParser());
 
 // Serve static files from public directory (including widget.js)
 app.use('/public', express.static(path.join(__dirname, 'public')));
@@ -734,12 +736,48 @@ app.post('/api/rag/chat', async (req, res) => {
             `${index + 1}. ${result.document.name}: ${result.chunk.content}`
           ).join('\n\n');
       }
+
+      // Also search web scraping data if available
+      try {
+        const ScrapedContent = require('./models/ScrapedContent');
+        const scrapedContent = await ScrapedContent.find(
+          { 
+            $text: { $search: message },
+            status: 'processed'
+          },
+          { score: { $meta: 'textScore' } }
+        )
+        .sort({ score: { $meta: 'textScore' } })
+        .limit(3);
+
+        if (scrapedContent.length > 0) {
+          const webContext = '\nRelevant web content:\n' + 
+            scrapedContent.map((content, index) => 
+              `${index + 1}. ${content.title || content.url}: ${content.content.substring(0, 500)}...`
+            ).join('\n\n');
+          context += webContext;
+        }
+      } catch (webError) {
+        console.log('Web scraping search failed:', webError.message);
+      }
     }
     
-    // Generate response using Ollama
+    // Generate response using Ollama with guard rails
     const prompt = useRAG && context ? 
-      `You are a helpful assistant. Answer the user's question based on the provided documents. If the answer is not in the documents, say so clearly.\n\n${context}\n\nUser question: ${message}` :
-      message;
+      `You are a helpful assistant with strict restrictions.
+
+CRITICAL RESTRICTIONS - YOU MUST FOLLOW THESE RULES:
+1. ONLY use the provided documents and web content to answer questions
+2. NEVER access the internet or external sources in real-time
+3. NEVER make up information not in the provided context
+4. If the answer is not in the provided context, say "I don't have that information in the provided documents or web content"
+5. NEVER provide URLs, links, or suggest searching the internet
+6. NEVER give general knowledge answers unless specifically in the context
+
+Answer the user's question based ONLY on the provided documents and web content. If the answer is not in the context, say so clearly.
+
+${context}\n\nUser question: ${message}` :
+      `I don't have access to any documents to answer your question. Please ensure documents are uploaded and RAG is enabled.`;
     
     const response = await callOllama('generate', {
       model,
@@ -1160,26 +1198,51 @@ Is there anything else I can help you with while you wait?`,
               for (const doc of documents) {
                 // Find best matching chunks using better search logic
                 const searchTerms = content.toLowerCase().split(' ').filter(term => term.length > 2);
-                const matchingChunks = doc.chunks.filter(chunk => {
+
+                // Enhanced relevance scoring for chunks
+                const scoredChunks = doc.chunks.map(chunk => {
                   const chunkContent = chunk.content.toLowerCase();
-                  // Match if chunk contains any significant search terms OR the full query
-                  return chunkContent.includes(content.toLowerCase()) || 
-                         searchTerms.some(term => chunkContent.includes(term));
-                }).slice(0, topK);
+                  let relevanceScore = 0;
+
+                  // Full query match (highest score)
+                  if (chunkContent.includes(content.toLowerCase())) {
+                    relevanceScore += 10;
+                  }
+
+                  // Individual term matches
+                  let termMatches = 0;
+                  for (const term of searchTerms) {
+                    if (chunkContent.includes(term)) {
+                      termMatches++;
+                      relevanceScore += 2;
+                    }
+                  }
+
+                  // More strict relevance: require at least 3 term matches for knowledge base content (unless full query match)
+                  const isRelevant = relevanceScore >= 10 || termMatches >= 3;
+
+                  return {
+                    chunk,
+                    relevanceScore,
+                    isRelevant
+                  };
+                }).filter(scored => scored.isRelevant)
+                  .sort((a, b) => b.relevanceScore - a.relevanceScore)
+                  .slice(0, topK);
+
+                console.log(`📄 Document "${doc.name}": found ${scoredChunks.length} relevant chunks (filtered from ${doc.chunks.length})`);
                 
-                console.log(`📄 Document "${doc.name}": found ${matchingChunks.length} matching chunks`);
-                
-                for (const chunk of matchingChunks) {
+                for (const scoredChunk of scoredChunks) {
                   searchResults.push({
                     chunk: {
-                      id: chunk.id,
-                      content: chunk.content,
+                      id: scoredChunk.chunk.id,
+                      content: scoredChunk.chunk.content,
                       metadata: {
-                        ...chunk.metadata,
+                        ...scoredChunk.chunk.metadata,
                         source: doc.name
                       }
                     },
-                    score: Math.random() * 0.3 + 0.7, // Placeholder score
+                    score: scoredChunk.relevanceScore / 10, // Normalize relevance score to 0-1+ range
                     document: {
                       id: doc._id,
                       name: doc.name,
@@ -1210,13 +1273,36 @@ Is there anything else I can help you with while you wait?`,
                 
                 // Add web results to search results
                 for (const webResult of webResults) {
-                  const searchTerms = content.toLowerCase().split(' ').filter(term => term.length > 2);
+                  // Clean search terms by removing punctuation and filtering short terms
+                  const searchTerms = content.toLowerCase()
+                    .replace(/[^\w\s]/g, ' ') // Remove punctuation
+                    .split(/\s+/) // Split on whitespace
+                    .filter(term => term.length > 2); // Filter short terms
                   const webContent = webResult.content.toLowerCase();
-                  
-                  // Check if web content matches search terms
-                  if (webContent.includes(content.toLowerCase()) || 
-                      searchTerms.some(term => webContent.includes(term))) {
-                    
+
+                  // Enhanced relevance scoring for web content
+                  let webRelevanceScore = 0;
+
+                  // Full query match (highest score)
+                  if (webContent.includes(content.toLowerCase().replace(/[^\w\s]/g, ' '))) {
+                    webRelevanceScore += 25; // Much higher score for web content
+                  }
+
+                  // Individual term matches
+                  let webTermMatches = 0;
+                  for (const term of searchTerms) {
+                    if (webContent.includes(term)) {
+                      webTermMatches++;
+                      webRelevanceScore += 5; // Much higher score per term for web content
+                    }
+                  }
+
+                  // Check if web content is relevant (require at least 1 term match or full query match)
+                  const isWebRelevant = webRelevanceScore >= 25 || webTermMatches >= 1;
+
+                  console.log(`🌐 Web result "${webResult.title}": relevance score ${webRelevanceScore} (${webTermMatches} term matches) - ${isWebRelevant ? 'INCLUDED' : 'FILTERED OUT'}`);
+
+                  if (isWebRelevant) {
                     searchResults.push({
                       chunk: {
                         id: uuidv4(),
@@ -1228,7 +1314,7 @@ Is there anything else I can help you with while you wait?`,
                           scrapedAt: webResult.scrapedAt
                         }
                       },
-                      score: Math.random() * 0.3 + 0.7,
+                      score: webRelevanceScore / 10, // Normalize but favor web content
                       document: {
                         id: webResult._id,
                         name: webResult.title,
@@ -1243,9 +1329,14 @@ Is there anything else I can help you with while you wait?`,
             }
             
             console.log(`📋 Total RAG search returned ${searchResults.length} results (documents + web)`);
-            
+
+            // Sort all results by relevance score (highest first) and limit to topK
+            searchResults = searchResults
+              .sort((a, b) => b.score - a.score)
+              .slice(0, topK);
+
             if (searchResults.length > 0) {
-              context = searchResults.map((result, index) => 
+              context = searchResults.map((result, index) =>
                 `Document ${index + 1} (${result.document.name}):\n${result.chunk.content}`
               ).join('\n\n');
               
@@ -1422,7 +1513,9 @@ app.get('/api/rag/stats', async (req, res) => {
 const botRoutes = require('./routes/bots');
 const widgetRoutes = require('./routes/widget');
 const deploymentRoutes = require('./routes/deployment');
-const { ensureUser } = require('./utils/userHelper');
+// Authentication and RBAC middleware
+const { authenticate, authorize, requirePermission, requirePermissions, optionalAuth } = require('./middleware/auth');
+const { initializeSystem, performSystemMaintenance } = require('./utils/systemInit');
 
 // Apply routes
 const analyticsRoutes = require('./routes/analytics');
@@ -1433,6 +1526,8 @@ const userRoutes = require('./routes/users');
 const roleRoutes = require('./routes/roles');
 const settingsRoutes = require('./routes/settings');
 const webScrapingRoutes = require('./routes/webScraping');
+const channelAccountRoutes = require('./routes/channel-accounts');
+const conversationRoutes = require('./routes/conversations');
 
 // Public routes (no authentication required)
 app.use('/api/auth', authRoutes);
@@ -1441,16 +1536,18 @@ app.use('/api/auth', authRoutes);
 app.use('/api/users/roles', userRoutes);
 
 // Protected routes (authentication required)
-app.use('/api/users', ensureUser, userRoutes);
-app.use('/api/roles', ensureUser, roleRoutes);
-app.use('/api/bots', ensureUser, botRoutes);
-app.use('/api/widget', widgetRoutes);
-app.use('/api/deployment', ensureUser, deploymentRoutes);
-app.use('/api/analytics', ensureUser, analyticsRoutes);
-app.use('/api/agents', ensureUser, agentRoutes);
-app.use('/api/handoffs', ensureUser, handoffRoutes);
-app.use('/api/settings', ensureUser, settingsRoutes);
-app.use('/api/web-scraping', ensureUser, webScrapingRoutes);
+app.use('/api/users', authenticate, userRoutes);
+app.use('/api/roles', authenticate, roleRoutes);
+app.use('/api/bots', authenticate, requirePermission('bots', 'view'), botRoutes);
+app.use('/api/widget', widgetRoutes); // Public widget endpoints
+app.use('/api/deployment', authenticate, requirePermission('bots', 'publish'), deploymentRoutes);
+app.use('/api/analytics', authenticate, requirePermission('analytics', 'view'), analyticsRoutes);
+app.use('/api/agents', authenticate, requirePermission('agents', 'view'), agentRoutes);
+app.use('/api/handoffs', authenticate, requirePermission('handoffs', 'view'), handoffRoutes);
+app.use('/api/settings', authenticate, requirePermission('settings', 'view'), settingsRoutes);
+app.use('/api/web-scraping', authenticate, requirePermission('settings', 'edit'), webScrapingRoutes);
+app.use('/api/channel-accounts', authenticate, requirePermission('bots', 'edit'), channelAccountRoutes);
+app.use('/api/conversations', authenticate, requirePermission('chat', 'view'), conversationRoutes);
 
 // Serve widget static files with proper headers
 app.use(express.static(path.join(__dirname, 'public')));
@@ -1474,6 +1571,224 @@ app.use(notFoundHandler);
 app.use(errorHandler);
 
 // Web scraping endpoints are now handled in routes/webScraping.js
+// Import Discord service
+const discordBot = require('./services/discordBot');
+const DiscordMessage = require('./models/DiscordMessage');
+const DiscordSettings = require('./models/DiscordSettings');
+
+// Discord Bot Routes
+
+// Initialize Discord bot
+app.post('/api/discord/connect', async (req, res) => {
+  try {
+    const { token } = req.body;
+    
+    if (!token) {
+      return res.status(400).json({ error: 'Bot token is required' });
+    }
+    
+    const success = await discordBot.login(token);
+    
+    if (success) {
+      // Store token in settings (encrypted in production)
+      await Settings.findOneAndUpdate(
+        { isDefault: true },
+        { $set: { 'discord.token': token, 'discord.enabled': true } },
+        { upsert: true }
+      );
+      
+      res.json({ success: true, message: 'Discord bot connected successfully' });
+    } else {
+      res.status(400).json({ error: 'Failed to connect Discord bot' });
+    }
+  } catch (error) {
+    console.error('Discord connect error:', error);
+    res.status(500).json({ error: 'Failed to connect Discord bot' });
+  }
+});
+
+// Get Discord bot info
+app.get('/api/discord/info', (req, res) => {
+  const info = discordBot.getBotInfo();
+  if (info) {
+    res.json(info);
+  } else {
+    res.status(503).json({ error: 'Discord bot not connected' });
+  }
+});
+
+// Get Discord messages
+app.get('/api/discord/messages', async (req, res) => {
+  try {
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 50;
+    const guildId = req.query.guildId;
+    
+    const query = {};
+    if (guildId) query['guild.id'] = guildId;
+    
+    const skip = (page - 1) * limit;
+    
+    const messages = await DiscordMessage.find(query)
+      .sort({ timestamp: -1 })
+      .skip(skip)
+      .limit(limit);
+      
+    const total = await DiscordMessage.countDocuments(query);
+    
+    res.json({
+      messages,
+      total,
+      page,
+      totalPages: Math.ceil(total / limit)
+    });
+  } catch (error) {
+    console.error('Error fetching Discord messages:', error);
+    res.status(500).json({ error: 'Failed to fetch messages' });
+  }
+});
+
+// Get pending replies
+app.get('/api/discord/pending', async (req, res) => {
+  try {
+    const guildId = req.query.guildId;
+    const query = { replied: false };
+    if (guildId) query['guild.id'] = guildId;
+    
+    const pendingMessages = await DiscordMessage.find(query)
+      .sort({ timestamp: -1 });
+      
+    res.json(pendingMessages);
+  } catch (error) {
+    console.error('Error fetching pending Discord messages:', error);
+    res.status(500).json({ error: 'Failed to fetch pending messages' });
+  }
+});
+
+// Send manual reply
+app.post('/api/discord/reply', async (req, res) => {
+  try {
+    const { messageId, reply } = req.body;
+    
+    const messageDoc = await DiscordMessage.findOne({ messageId });
+    if (!messageDoc) {
+      return res.status(404).json({ error: 'Message not found' });
+    }
+
+    const success = await discordBot.replyToMessage(messageId, messageDoc.channel.id, reply);
+    
+    if (success) {
+      await DiscordMessage.findOneAndUpdate(
+        { messageId },
+        { 
+          replied: true, 
+          botReply: reply, 
+          manualReply: true 
+        }
+      );
+      
+      res.json({ success: true });
+    } else {
+      res.status(500).json({ error: 'Failed to send reply' });
+    }
+  } catch (error) {
+    console.error('Error sending Discord reply:', error);
+    res.status(500).json({ error: 'Failed to send reply' });
+  }
+});
+
+// Send message to channel
+app.post('/api/discord/send', async (req, res) => {
+  try {
+    const { channelId, message } = req.body;
+    
+    const success = await discordBot.sendMessage(channelId, message);
+    
+    if (success) {
+      res.json({ success: true });
+    } else {
+      res.status(500).json({ error: 'Failed to send message' });
+    }
+  } catch (error) {
+    console.error('Error sending Discord message:', error);
+    res.status(500).json({ error: 'Failed to send message' });
+  }
+});
+
+// Get Discord settings
+app.get('/api/discord/settings', async (req, res) => {
+  try {
+    const guildId = req.query.guildId;
+    const settings = await DiscordSettings.findOne({ 
+      $or: [{ guildId }, { isDefault: true }] 
+    }).sort({ guildId: -1 });
+    
+    res.json(settings || {});
+  } catch (error) {
+    console.error('Error fetching Discord settings:', error);
+    res.status(500).json({ error: 'Failed to fetch settings' });
+  }
+});
+
+// Update Discord settings
+app.put('/api/discord/settings', async (req, res) => {
+  try {
+    const { guildId, ...settingsData } = req.body;
+    
+    if (guildId) {
+      await DiscordSettings.findOneAndUpdate(
+        { guildId },
+        { guildId, ...settingsData },
+        { upsert: true, new: true }
+      );
+    } else {
+      await DiscordSettings.findOneAndUpdate(
+        { isDefault: true },
+        { isDefault: true, ...settingsData },
+        { upsert: true, new: true }
+      );
+    }
+    
+    res.json({ success: true, message: 'Discord settings updated' });
+  } catch (error) {
+    console.error('Error updating Discord settings:', error);
+    res.status(500).json({ error: 'Failed to update settings' });
+  }
+});
+
+// Get Discord analytics
+app.get('/api/discord/analytics', async (req, res) => {
+  try {
+    const guildId = req.query.guildId;
+    const query = guildId ? { 'guild.id': guildId } : {};
+    
+    const totalMessages = await DiscordMessage.countDocuments(query);
+    const repliedMessages = await DiscordMessage.countDocuments({ ...query, replied: true });
+    const aiReplies = await DiscordMessage.countDocuments({ ...query, aiGenerated: true });
+    const ragReplies = await DiscordMessage.countDocuments({ ...query, ragUsed: true });
+    
+    // Recent messages (last 24 hours)
+    const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    const recentMessages = await DiscordMessage.countDocuments({
+      ...query,
+      timestamp: { $gte: yesterday }
+    });
+    
+    res.json({
+      totalMessages,
+      repliedMessages,
+      aiReplies,
+      ragReplies,
+      recentMessages,
+      responseRate: totalMessages > 0 ? (repliedMessages / totalMessages * 100).toFixed(1) : 0,
+      aiResponseRate: repliedMessages > 0 ? (aiReplies / repliedMessages * 100).toFixed(1) : 0,
+      ragUsageRate: aiReplies > 0 ? (ragReplies / aiReplies * 100).toFixed(1) : 0
+    });
+  } catch (error) {
+    console.error('Error fetching Discord analytics:', error);
+    res.status(500).json({ error: 'Failed to fetch analytics' });
+  }
+});
 
 // Start server
 server.listen(PORT, () => {
@@ -1500,4 +1815,43 @@ server.listen(PORT, () => {
   console.log(`⚡ Make sure Ollama is running on http://localhost:11434`);
   console.log(`🔑 OpenAI API Key: Dynamic (from database settings)`);
   console.log(`\n🎯 Bot Platform Ready! Create bots via frontend and deploy with embed codes.`);
+});
+// Auto-start Discord bot if configured
+const startDiscordBot = async () => {
+  try {
+    const settings = await Settings.findOne({ isDefault: true });
+    const token = settings?.discord?.token || process.env.DISCORD_BOT_TOKEN;
+    
+    if (token && settings?.discord?.enabled !== false) {
+      console.log('Starting Discord bot...');
+      const success = await discordBot.login(token);
+      if (success) {
+        console.log('✅ Discord bot started successfully');
+      } else {
+        console.log('❌ Failed to start Discord bot');
+      }
+    } else {
+      console.log('💡 Discord bot not configured. Add token via API or environment variable.');
+    }
+  } catch (error) {
+    console.error('Discord bot startup error:', error);
+  }
+};
+
+// Start Discord bot after database connection
+database.connect().then(async () => {
+  await database.initializeDefaultData();
+
+  // Initialize RBAC system
+  try {
+    await initializeSystem();
+    console.log('✅ RBAC system initialized');
+  } catch (error) {
+    console.warn('⚠️  RBAC initialization failed:', error.message);
+  }
+
+  await startDiscordBot();
+  console.log('✅ All services initialized');
+}).catch((error) => {
+  console.warn('⚠️  MongoDB not available - some features disabled');
 });

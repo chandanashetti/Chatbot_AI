@@ -39,7 +39,7 @@ const LoginPage = () => {
     // Demo authentication bypass for testing
     if (formData.email === 'admin@chatbot.ai' && formData.password === 'admin123') {
       dispatch(loginStart())
-      
+
       // Simulate API delay
       setTimeout(() => {
         const mockUser = {
@@ -65,12 +65,46 @@ const LoginPage = () => {
           }
         }
         const mockToken = 'demo-token-123'
-        
+
         dispatch(loginSuccess({ user: mockUser, token: mockToken }))
         toast.success('Welcome to your dashboard! 🎉')
-        navigate('/admin')
+        navigate('/dashboard')
       }, 1500)
-      
+
+      return
+    }
+
+    // Demo agent authentication for testing
+    if (formData.email === 'agent@chatbot.ai' && formData.password === 'agent123') {
+      dispatch(loginStart())
+
+      // Simulate API delay
+      setTimeout(() => {
+        const mockUser = {
+          id: '2',
+          email: formData.email,
+          username: 'agent',
+          role: 'agent' as const,
+          status: 'active',
+          profile: {
+            firstName: 'Agent',
+            lastName: 'User',
+            timezone: 'UTC',
+            language: 'en'
+          },
+          permissions: {
+            agent: { view: true, chat: true, handoff: true },
+            analytics: { view: true },
+            dashboard: { view: true }
+          }
+        }
+        const mockToken = 'demo-agent-token-123'
+
+        dispatch(loginSuccess({ user: mockUser, token: mockToken }))
+        toast.success('Welcome to your agent portal! 🎉')
+        navigate('/dashboard')
+      }, 1500)
+
       return
     }
 
@@ -78,13 +112,17 @@ const LoginPage = () => {
 
     try {
       const response = await authAPI.login(formData)
-      const { user, token } = response.data
-      
+      console.log('🔐 Login API Response:', response.data)
+
+      // The backend returns: { success: true, data: { user, token } }
+      const { user, token } = response.data.data || response.data
+
       dispatch(loginSuccess({ user, token }))
       toast.success('Login successful!')
-      navigate('/admin')
+      navigate('/dashboard')
     } catch (error: any) {
-      const errorMessage = error.response?.data?.message || 'Login failed. Please try again.'
+      console.log('❌ Login Error:', error.response?.data || error.message)
+      const errorMessage = error.response?.data?.message || error.response?.data?.error?.message || 'Login failed. Please try again.'
       dispatch(loginFailure(errorMessage))
       toast.error(errorMessage)
     }

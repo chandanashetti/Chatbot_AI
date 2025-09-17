@@ -101,19 +101,19 @@ export default PermissionGuard
 
 // Convenience components for common use cases
 export const AdminOnly = ({ children, fallback }: { children: ReactNode; fallback?: ReactNode }) => (
-  <PermissionGuard roles={['admin', 'superadmin']} fallback={fallback}>
+  <PermissionGuard roles={['admin', 'superadministrator']} fallback={fallback}>
     {children}
   </PermissionGuard>
 )
 
 export const SuperAdminOnly = ({ children, fallback }: { children: ReactNode; fallback?: ReactNode }) => (
-  <PermissionGuard roles="superadmin" fallback={fallback}>
+  <PermissionGuard roles="superadministrator" fallback={fallback}>
     {children}
   </PermissionGuard>
 )
 
 export const ManagerAndUp = ({ children, fallback }: { children: ReactNode; fallback?: ReactNode }) => (
-  <PermissionGuard roles={['superadmin', 'admin', 'manager']} fallback={fallback}>
+  <PermissionGuard roles={['superadministrator', 'admin', 'manager']} fallback={fallback}>
     {children}
   </PermissionGuard>
 )

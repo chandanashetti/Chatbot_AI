@@ -142,23 +142,27 @@ class Database {
       }
 
       // Create default admin user if none exist
-      const existingAdmin = await User.findOne({ role: 'superadmin' });
+      const existingAdmin = await User.findOne({ role: 'superadministrator' });
       if (!existingAdmin) {
         const defaultAdmin = new User({
           email: 'admin@chatbot.ai',
           password: 'admin123',
-          name: 'System Administrator',
-          role: 'superadmin',
+          role: 'superadministrator',
           status: 'active',
+          profile: {
+            firstName: 'System',
+            lastName: 'Administrator'
+          },
           permissions: {
-            admin: { create: true, read: true, update: true, delete: true },
-            bots: { create: true, read: true, update: true, delete: true, deploy: true },
-            knowledgeBase: { upload: true, read: true, delete: true, export: true },
+            dashboard: { view: true, export: true },
+            users: { view: true, create: true, edit: true, delete: true, manageRoles: true },
+            bots: { view: true, create: true, edit: true, delete: true, publish: true },
+            agents: { view: true, create: true, edit: true, delete: true, assign: true },
             analytics: { view: true, export: true, advanced: true },
-            settings: { view: true, update: true, system: true },
-            users: { create: true, read: true, update: true, delete: true, permissions: true },
-            integrations: { view: true, configure: true, connect: true },
-            chat: { view: true, moderate: true, export: true }
+            knowledgeBase: { view: true, upload: true, edit: true, delete: true },
+            settings: { view: true, edit: true, system: true },
+            chat: { view: true, moderate: true, export: true },
+            handoffs: { view: true, accept: true, reject: true, manage: true }
           }
         });
         await defaultAdmin.save();

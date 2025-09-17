@@ -5,18 +5,10 @@ const HandoffRequest = require('../models/HandoffRequest');
 const BotConversation = require('../models/BotConversation');
 const mongoose = require('mongoose');
 
-// Middleware to ensure user is authenticated (assuming this exists)
-const ensureUser = (req, res, next) => {
-  // This should be implemented based on your auth system
-  // For now, we'll assume req.user is set
-  if (!req.user) {
-    return res.status(401).json({ error: 'Authentication required' });
-  }
-  next();
-};
+// Note: Authentication is handled by server.js middleware
 
 // GET /api/agents - Get all agents with optional filtering
-router.get('/', ensureUser, async (req, res) => {
+router.get('/', async (req, res) => {
   try {
     console.log('📋 Fetching agents...');
     const { 
@@ -93,7 +85,7 @@ router.get('/', ensureUser, async (req, res) => {
 });
 
 // GET /api/agents/available - Get available agents for handoff
-router.get('/available', ensureUser, async (req, res) => {
+router.get('/available', async (req, res) => {
   try {
     console.log('🔍 Finding available agents...');
     const { skills, departments, languages, priority } = req.query;
@@ -122,7 +114,7 @@ router.get('/available', ensureUser, async (req, res) => {
 });
 
 // GET /api/agents/:id - Get specific agent
-router.get('/:id', ensureUser, async (req, res) => {
+router.get('/:id', async (req, res) => {
   try {
     const { id } = req.params;
     console.log(`📋 Fetching agent ${id}...`);
@@ -162,7 +154,7 @@ router.get('/:id', ensureUser, async (req, res) => {
 });
 
 // POST /api/agents - Create new agent
-router.post('/', ensureUser, async (req, res) => {
+router.post('/', async (req, res) => {
   try {
     console.log('➕ Creating new agent...');
     const { userId, ...otherData } = req.body;
@@ -242,7 +234,7 @@ router.post('/', ensureUser, async (req, res) => {
 });
 
 // PUT /api/agents/:id - Update agent
-router.put('/:id', ensureUser, async (req, res) => {
+router.put('/:id', async (req, res) => {
   try {
     const { id } = req.params;
     console.log(`📝 Updating agent ${id}...`);
@@ -289,7 +281,7 @@ router.put('/:id', ensureUser, async (req, res) => {
 });
 
 // PATCH /api/agents/:id/status - Update agent status
-router.patch('/:id/status', ensureUser, async (req, res) => {
+router.patch('/:id/status', async (req, res) => {
   try {
     const { id } = req.params;
     const { status } = req.body;
@@ -342,7 +334,7 @@ router.patch('/:id/status', ensureUser, async (req, res) => {
 });
 
 // PATCH /api/agents/:id/availability - Update agent availability
-router.patch('/:id/availability', ensureUser, async (req, res) => {
+router.patch('/:id/availability', async (req, res) => {
   try {
     const { id } = req.params;
     const { isOnline, maxConcurrentChats } = req.body;
@@ -400,7 +392,7 @@ router.patch('/:id/availability', ensureUser, async (req, res) => {
 });
 
 // DELETE /api/agents/:id - Soft delete agent
-router.delete('/:id', ensureUser, async (req, res) => {
+router.delete('/:id', async (req, res) => {
   try {
     const { id } = req.params;
     console.log(`🗑️ Deactivating agent ${id}...`);
@@ -448,7 +440,7 @@ router.delete('/:id', ensureUser, async (req, res) => {
 });
 
 // GET /api/agents/:id/stats - Get agent statistics
-router.get('/:id/stats', ensureUser, async (req, res) => {
+router.get('/:id/stats', async (req, res) => {
   try {
     const { id } = req.params;
     const { period = '30d' } = req.query;
@@ -552,11 +544,380 @@ router.get('/:id/stats', ensureUser, async (req, res) => {
   }
 });
 
+// GET /api/agents/:id/analytics - Get agent analytics
+router.get('/:id/analytics', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { startDate, endDate } = req.query;
+
+    console.log(`📊 Fetching analytics for agent ${id}...`);
+
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid agent ID'
+      });
+    }
+
+    // Try to find agent by ID first, then by userId
+    let agent = await Agent.findById(id);
+    if (!agent) {
+      // If not found by agent ID, try to find by userId (for when user ID is passed)
+      agent = await Agent.findOne({ userId: id });
+    }
+
+    if (!agent) {
+      // If still not found, check if this is a user with agent role who needs an agent record
+      const User = require('../models/User');
+      const user = await User.findById(id);
+
+      if (user && user.role === 'agent') {
+        // Create an agent record for this user
+        agent = new Agent({
+          name: user.fullName || `${user.profile.firstName} ${user.profile.lastName}`,
+          email: user.email,
+          phone: user.profile.phone || '',
+          userId: user._id,
+          role: 'agent',
+          status: 'available',
+          isActive: true,
+          availability: {
+            isOnline: true,
+            lastSeen: new Date(),
+            maxConcurrentChats: 5
+          },
+          metrics: {
+            totalChatsHandled: 0,
+            activeChats: 0,
+            averageResponseTime: 2.5,
+            customerSatisfactionScore: 4.0,
+            ratingsCount: 0
+          }
+        });
+        await agent.save();
+        console.log(`✅ Created new agent record for user ${user.email} - set as available`);
+      } else {
+        return res.status(404).json({
+          success: false,
+          error: 'Agent not found. Make sure you have agent role permissions.'
+        });
+      }
+    } else {
+      // Update existing agent as online when they access analytics
+      agent.availability.isOnline = true;
+      agent.availability.lastSeen = new Date();
+      if (agent.status === 'offline') {
+        agent.status = 'available';
+      }
+      await agent.save();
+      console.log(`✅ Updated agent ${agent.name} as online via analytics`);
+    }
+
+    // Calculate date range
+    const endDateObj = endDate ? new Date(endDate) : new Date();
+    const startDateObj = startDate ? new Date(startDate) : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+
+    // Get handoff requests handled by this agent
+    const handoffAnalytics = await HandoffRequest.aggregate([
+      {
+        $match: {
+          assignedAgent: agent._id,
+          createdAt: { $gte: startDateObj, $lte: endDateObj }
+        }
+      },
+      {
+        $group: {
+          _id: null,
+          totalHandoffs: { $sum: 1 },
+          completedHandoffs: {
+            $sum: { $cond: [{ $eq: ['$status', 'completed'] }, 1, 0] }
+          },
+          averageResponseTime: { $avg: '$metrics.timeToAcceptance' },
+          averageResolutionTime: { $avg: '$metrics.resolutionTime' },
+          averageSatisfaction: { $avg: '$metrics.customerSatisfaction' },
+          satisfactionCount: {
+            $sum: { $cond: [{ $ne: ['$metrics.customerSatisfaction', null] }, 1, 0] }
+          },
+          categoriesHandled: {
+            $push: {
+              category: '$category',
+              priority: '$priority',
+              status: '$status',
+              satisfaction: '$metrics.customerSatisfaction',
+              responseTime: '$metrics.timeToAcceptance',
+              date: '$createdAt'
+            }
+          }
+        }
+      }
+    ]);
+
+    // Get daily performance data
+    const dailyPerformance = await HandoffRequest.aggregate([
+      {
+        $match: {
+          assignedAgent: agent._id,
+          createdAt: { $gte: startDateObj, $lte: endDateObj }
+        }
+      },
+      {
+        $group: {
+          _id: {
+            year: { $year: '$createdAt' },
+            month: { $month: '$createdAt' },
+            day: { $dayOfMonth: '$createdAt' }
+          },
+          chatsHandled: { $sum: 1 },
+          avgResponseTime: { $avg: '$metrics.timeToAcceptance' },
+          satisfaction: { $avg: '$metrics.customerSatisfaction' }
+        }
+      },
+      {
+        $sort: { '_id.year': 1, '_id.month': 1, '_id.day': 1 }
+      }
+    ]);
+
+    // Format daily performance data
+    const performanceByDate = dailyPerformance.map(day => ({
+      date: `${day._id.year}-${String(day._id.month).padStart(2, '0')}-${String(day._id.day).padStart(2, '0')}`,
+      chatsHandled: day.chatsHandled,
+      avgResponseTime: day.avgResponseTime || 0,
+      satisfaction: day.satisfaction || 0
+    }));
+
+    // Process categories
+    const analyticsData = handoffAnalytics[0];
+    const chatsByCategory = {
+      technical: 0,
+      billing: 0,
+      sales: 0,
+      support: 0,
+      general: 0
+    };
+
+    const satisfactionDistribution = [
+      { rating: 5, count: 0 },
+      { rating: 4, count: 0 },
+      { rating: 3, count: 0 },
+      { rating: 2, count: 0 },
+      { rating: 1, count: 0 }
+    ];
+
+    if (analyticsData && analyticsData.categoriesHandled) {
+      analyticsData.categoriesHandled.forEach(item => {
+        // Count by category
+        if (chatsByCategory.hasOwnProperty(item.category)) {
+          chatsByCategory[item.category]++;
+        } else {
+          chatsByCategory.general++;
+        }
+
+        // Count satisfaction ratings
+        if (item.satisfaction) {
+          const rating = Math.round(item.satisfaction);
+          const ratingIndex = satisfactionDistribution.findIndex(r => r.rating === rating);
+          if (ratingIndex !== -1) {
+            satisfactionDistribution[ratingIndex].count++;
+          }
+        }
+      });
+    }
+
+    // Generate hourly response time data (mock for now, would need more complex aggregation for real data)
+    const responseTimeByHour = [];
+    for (let hour = 9; hour <= 17; hour++) {
+      responseTimeByHour.push({
+        hour: `${String(hour).padStart(2, '0')}:00`,
+        avgTime: analyticsData ?
+          Math.random() * 1.5 + (analyticsData.averageResponseTime || 2) - 0.75 :
+          Math.random() * 1.5 + 1.25
+      });
+    }
+
+    const response = {
+      personalMetrics: {
+        totalChatsHandled: agent.metrics.totalChatsHandled,
+        activeChats: agent.metrics.activeChats,
+        averageResponseTime: analyticsData ? (analyticsData.averageResponseTime / 1000) : agent.metrics.averageResponseTime,
+        customerSatisfactionScore: analyticsData ? analyticsData.averageSatisfaction : agent.metrics.customerSatisfactionScore,
+        ratingsCount: analyticsData ? analyticsData.satisfactionCount : agent.metrics.ratingsCount,
+        completionRate: analyticsData && analyticsData.totalHandoffs > 0 ?
+          (analyticsData.completedHandoffs / analyticsData.totalHandoffs) * 100 : 95,
+        handoffsAccepted: analyticsData ? analyticsData.totalHandoffs : 0,
+        handoffsCompleted: analyticsData ? analyticsData.completedHandoffs : 0
+      },
+      performanceByDate,
+      chatsByCategory,
+      satisfactionDistribution,
+      responseTimeByHour,
+      monthlyGoals: {
+        chatsTarget: 150,
+        chatsActual: agent.metrics.totalChatsHandled,
+        satisfactionTarget: 4.5,
+        satisfactionActual: analyticsData ? analyticsData.averageSatisfaction : agent.metrics.customerSatisfactionScore,
+        responseTimeTarget: 2.0,
+        responseTimeActual: analyticsData ? (analyticsData.averageResponseTime / 1000) : agent.metrics.averageResponseTime
+      }
+    };
+
+    console.log(`✅ Generated analytics for agent ${agent.name}`);
+
+    res.json({
+      success: true,
+      data: response
+    });
+  } catch (error) {
+    console.error('❌ Error fetching agent analytics:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch agent analytics',
+      details: error.message
+    });
+  }
+});
+
+// GET /api/agents/me - Get current agent profile (creates if not exists)
+router.get('/me', async (req, res) => {
+  try {
+    const userId = req.user._id || req.user.id;
+    console.log(`📋 Getting agent profile for user ${userId}...`);
+
+    // Try to find existing agent record
+    let agent = await Agent.findOne({ userId: userId });
+
+    if (!agent) {
+      // Check if this user has agent role
+      const User = require('../models/User');
+      const user = await User.findById(userId);
+
+      if (user && user.role === 'agent') {
+        // Create an agent record for this user
+        agent = new Agent({
+          name: user.fullName || `${user.profile.firstName} ${user.profile.lastName}`,
+          email: user.email,
+          phone: user.profile.phone || '',
+          userId: user._id,
+          role: 'agent',
+          status: 'available',
+          isActive: true,
+          availability: {
+            isOnline: true,
+            lastSeen: new Date(),
+            maxConcurrentChats: 5
+          },
+          metrics: {
+            totalChatsHandled: 0,
+            activeChats: 0,
+            averageResponseTime: 2.5,
+            customerSatisfactionScore: 4.0,
+            ratingsCount: 0
+          }
+        });
+        await agent.save();
+        console.log(`✅ Created new agent record for user ${user.email} - set as available`);
+      } else {
+        return res.status(403).json({
+          success: false,
+          error: 'User does not have agent role permissions'
+        });
+      }
+    } else {
+      // Update existing agent as online when they access the dashboard
+      agent.availability.isOnline = true;
+      agent.availability.lastSeen = new Date();
+      if (agent.status === 'offline') {
+        agent.status = 'available';
+      }
+      await agent.save();
+      console.log(`✅ Updated agent ${agent.name} as online`);
+    }
+
+    console.log(`✅ Agent profile ready: ${agent.name} (${agent.status})`);
+
+    res.json({
+      success: true,
+      data: agent
+    });
+  } catch (error) {
+    console.error('❌ Error getting agent profile:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to get agent profile',
+      details: error.message
+    });
+  }
+});
+
+// POST /api/agents/me/heartbeat - Update agent heartbeat (keeps them online)
+router.post('/me/heartbeat', async (req, res) => {
+  try {
+    const userId = req.user._id || req.user.id;
+
+    const agent = await Agent.findOne({ userId: userId });
+    if (!agent) {
+      return res.status(404).json({
+        success: false,
+        error: 'Agent not found'
+      });
+    }
+
+    // Update heartbeat
+    agent.availability.lastSeen = new Date();
+    agent.availability.isOnline = true;
+    await agent.save();
+
+    res.json({
+      success: true,
+      data: { lastSeen: agent.availability.lastSeen }
+    });
+  } catch (error) {
+    console.error('❌ Error updating agent heartbeat:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to update heartbeat'
+    });
+  }
+});
+
+// POST /api/agents/me/offline - Set agent as offline
+router.post('/me/offline', async (req, res) => {
+  try {
+    const userId = req.user._id || req.user.id;
+
+    const agent = await Agent.findOne({ userId: userId });
+    if (!agent) {
+      return res.status(404).json({
+        success: false,
+        error: 'Agent not found'
+      });
+    }
+
+    // Set offline
+    agent.availability.isOnline = false;
+    agent.status = 'offline';
+    agent.availability.lastSeen = new Date();
+    await agent.save();
+
+    console.log(`✅ Agent ${agent.name} set offline`);
+
+    res.json({
+      success: true,
+      data: { status: agent.status, isOnline: agent.availability.isOnline }
+    });
+  } catch (error) {
+    console.error('❌ Error setting agent offline:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to set agent offline'
+    });
+  }
+});
+
 // GET /api/agents/dashboard/summary - Get dashboard summary for agents
-router.get('/dashboard/summary', ensureUser, async (req, res) => {
+router.get('/dashboard/summary', async (req, res) => {
   try {
     console.log('📊 Fetching agent dashboard summary...');
-    
+
     const [
       totalAgents,
       availableAgents,
@@ -575,7 +936,7 @@ router.get('/dashboard/summary', ensureUser, async (req, res) => {
 
     // Get queue statistics
     const queueStats = await HandoffRequest.getQueueStats();
-    
+
     // Get recent activity
     const recentHandoffs = await HandoffRequest.find({})
       .populate('assignedAgent', 'name')
@@ -598,19 +959,48 @@ router.get('/dashboard/summary', ensureUser, async (req, res) => {
     };
 
     console.log(`✅ Dashboard summary: ${totalAgents} agents, ${pendingHandoffs} pending handoffs`);
-    
+
     res.json({
       success: true,
       data: summary
     });
   } catch (error) {
     console.error('❌ Error fetching dashboard summary:', error);
-    res.status(500).json({ 
-      success: false, 
+    res.status(500).json({
+      success: false,
       error: 'Failed to fetch dashboard summary',
-      details: error.message 
+      details: error.message
     });
   }
 });
+
+// Background task to mark stale agents as offline
+const markStaleAgentsOffline = async () => {
+  try {
+    const staleTime = new Date(Date.now() - 5 * 60 * 1000); // 5 minutes ago
+
+    const result = await Agent.updateMany(
+      {
+        'availability.isOnline': true,
+        'availability.lastSeen': { $lt: staleTime }
+      },
+      {
+        $set: {
+          'availability.isOnline': false,
+          status: 'offline'
+        }
+      }
+    );
+
+    if (result.modifiedCount > 0) {
+      console.log(`🕐 Marked ${result.modifiedCount} stale agents as offline`);
+    }
+  } catch (error) {
+    console.error('❌ Error marking stale agents offline:', error);
+  }
+};
+
+// Run background task every 2 minutes
+setInterval(markStaleAgentsOffline, 2 * 60 * 1000);
 
 module.exports = router;

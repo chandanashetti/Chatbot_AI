@@ -1,38 +1,34 @@
 import { Routes, Route, Navigate } from 'react-router-dom';
-import { usePermissions } from '../hooks/usePermissions';
+import AgentLayout from '../components/layout/AgentLayout';
 import AgentDashboard from '../pages/agent/AgentDashboard';
 import AgentChat from '../pages/agent/AgentChat';
+import AgentAnalytics from '../pages/agent/AgentAnalytics';
+import HandoffRequests from '../pages/agent/HandoffRequests';
 
 const AgentRoutes = () => {
-  const { canAccess } = usePermissions();
-
-  // Check if user has agent permissions
-  const canAccessAgent = canAccess('agent:view');
-
-  if (!canAccessAgent) {
-    return <Navigate to="/login" replace />;
-  }
-
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
-      <Routes>
+    <Routes>
+      {/* Agent Layout with all sub-routes */}
+      <Route path="/" element={<AgentLayout />}>
         {/* Agent Dashboard */}
-        <Route 
-          path="/dashboard" 
-          element={<AgentDashboard />} 
-        />
-        
-        {/* Agent Chat Interface */}
-        <Route 
-          path="/chat/:handoffId" 
-          element={<AgentChat />} 
-        />
-        
+        <Route path="dashboard" element={<AgentDashboard />} />
+
+        {/* Handoff Requests Management */}
+        <Route path="handoffs" element={<HandoffRequests />} />
+
+        {/* Agent Analytics */}
+        <Route path="analytics" element={<AgentAnalytics />} />
+
+        {/* Agent Chat Interface - outside layout for full screen */}
+        <Route path="chat/:handoffId" element={<AgentChat />} />
+
         {/* Default redirect */}
-        <Route path="/" element={<Navigate to="/dashboard" replace />} />
-        <Route path="*" element={<Navigate to="/dashboard" replace />} />
-      </Routes>
-    </div>
+        <Route index element={<Navigate to="dashboard" replace />} />
+      </Route>
+
+      {/* Fallback redirect */}
+      <Route path="*" element={<Navigate to="dashboard" replace />} />
+    </Routes>
   );
 };
 

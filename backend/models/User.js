@@ -64,6 +64,14 @@ const permissionsSchema = new mongoose.Schema({
     view: { type: Boolean, default: false },
     moderate: { type: Boolean, default: false },
     export: { type: Boolean, default: false }
+  },
+
+  // Handoff management permissions
+  handoffs: {
+    view: { type: Boolean, default: false },
+    accept: { type: Boolean, default: false },
+    reject: { type: Boolean, default: false },
+    manage: { type: Boolean, default: false }
   }
 }, { _id: false });
 
@@ -156,6 +164,7 @@ const userSchema = new mongoose.Schema({
   // Role and Status
   role: {
     type: String,
+    enum: ['superadministrator', 'admin', 'manager', 'operator', 'viewer', 'agent'],
     default: 'viewer'
   },
   
@@ -303,47 +312,40 @@ userSchema.methods.resetFailedLogin = function() {
 
 userSchema.methods.validateAndSetRolePermissions = async function() {
   const Role = require('./Role');
-  
+
   // Convert role name to match Role model format (handle both display names and normalized names)
   const roleNormalizedName = this.role.toLowerCase().replace(/\s+/g, '');
-  
-  // Try to find role by name (both original and normalized formats)
-  let role = await Role.findOne({ 
+
+  // Create a comprehensive role mapping
+  const roleMap = {
+    'superadministrator': 'Super Administrator',
+    'superadmin': 'Super Administrator',
+    'admin': 'Administrator',
+    'administrator': 'Administrator',
+    'manager': 'Manager',
+    'operator': 'Operator',
+    'viewer': 'Viewer',
+    'agent': 'Agent'
+  };
+
+  // Try to find role by name (multiple strategies)
+  let role = await Role.findOne({
     $or: [
       { name: this.role, isDeleted: false, status: 'active' },
-      { name: new RegExp(`^${this.role}$`, 'i'), isDeleted: false, status: 'active' }
+      { name: new RegExp(`^${this.role}$`, 'i'), isDeleted: false, status: 'active' },
+      { name: roleMap[roleNormalizedName], isDeleted: false, status: 'active' }
     ]
   });
-  
-  // If role not found, try legacy hardcoded role mapping
-  if (!role) {
-    const legacyRoleMap = {
-      'superadmin': 'Super Administrator',
-      'admin': 'Administrator',
-      'manager': 'Manager',
-      'operator': 'Operator',
-      'viewer': 'Viewer',
-      'agent': 'Agent'
-    };
-    
-    const mappedRoleName = legacyRoleMap[roleNormalizedName];
-    if (mappedRoleName) {
-      role = await Role.findOne({ 
-        name: mappedRoleName, 
-        isDeleted: false, 
-        status: 'active' 
-      });
-    }
-  }
-  
+
   if (role) {
     // Update permissions from role
     this.permissions = role.permissions.toObject();
-    // Store the role name as used in Role model for consistency
+    // Store the normalized role name for consistency
     this.role = roleNormalizedName;
+    console.log(`✅ Role permissions updated for user ${this.email}: ${role.name}`);
   } else {
     // Fallback to default viewer permissions if role not found
-    console.warn(`Role "${this.role}" not found, using viewer permissions`);
+    console.warn(`⚠️ Role "${this.role}" not found in database, using default permissions`);
     this.role = 'viewer';
     this.permissions = this.getDefaultPermissions();
   }
@@ -359,7 +361,8 @@ userSchema.methods.getDefaultPermissions = function() {
       analytics: { view: true, export: true, advanced: true },
       knowledgeBase: { view: true, upload: true, edit: true, delete: true },
       settings: { view: true, edit: true, system: true },
-      chat: { view: true, moderate: true, export: true }
+      chat: { view: true, moderate: true, export: true },
+      handoffs: { view: true, accept: true, reject: true, manage: true }
     },
     admin: {
       dashboard: { view: true, export: true },
@@ -369,7 +372,8 @@ userSchema.methods.getDefaultPermissions = function() {
       analytics: { view: true, export: true, advanced: true },
       knowledgeBase: { view: true, upload: true, edit: true, delete: false },
       settings: { view: true, edit: true, system: false },
-      chat: { view: true, moderate: true, export: true }
+      chat: { view: true, moderate: true, export: true },
+      handoffs: { view: true, accept: true, reject: true, manage: true }
     },
     manager: {
       dashboard: { view: true, export: false },
@@ -379,7 +383,8 @@ userSchema.methods.getDefaultPermissions = function() {
       analytics: { view: true, export: false, advanced: false },
       knowledgeBase: { view: true, upload: true, edit: true, delete: false },
       settings: { view: true, edit: false, system: false },
-      chat: { view: true, moderate: true, export: false }
+      chat: { view: true, moderate: true, export: false },
+      handoffs: { view: true, accept: false, reject: false, manage: true }
     },
     operator: {
       dashboard: { view: true, export: false },
@@ -389,7 +394,8 @@ userSchema.methods.getDefaultPermissions = function() {
       analytics: { view: true, export: false, advanced: false },
       knowledgeBase: { view: true, upload: true, edit: false, delete: false },
       settings: { view: false, edit: false, system: false },
-      chat: { view: true, moderate: false, export: false }
+      chat: { view: true, moderate: false, export: false },
+      handoffs: { view: true, accept: false, reject: false, manage: false }
     },
     viewer: {
       dashboard: { view: true, export: false },
@@ -399,17 +405,19 @@ userSchema.methods.getDefaultPermissions = function() {
       analytics: { view: true, export: false, advanced: false },
       knowledgeBase: { view: true, upload: false, edit: false, delete: false },
       settings: { view: false, edit: false, system: false },
-      chat: { view: true, moderate: false, export: false }
+      chat: { view: true, moderate: false, export: false },
+      handoffs: { view: true, accept: false, reject: false, manage: false }
     },
     agent: {
       dashboard: { view: true, export: false },
       users: { view: false, create: false, edit: false, delete: false, manageRoles: false },
       bots: { view: false, create: false, edit: false, delete: false, publish: false },
       agents: { view: false, create: false, edit: false, delete: false, assign: false },
-      analytics: { view: false, export: false, advanced: false },
-      knowledgeBase: { view: false, upload: false, edit: false, delete: false },
+      analytics: { view: true, export: false, advanced: false },
+      knowledgeBase: { view: true, upload: false, edit: false, delete: false },
       settings: { view: false, edit: false, system: false },
-      chat: { view: true, moderate: false, export: false }
+      chat: { view: true, moderate: true, export: false },
+      handoffs: { view: true, accept: true, reject: true, manage: false }
     }
   };
   
@@ -418,6 +426,131 @@ userSchema.methods.getDefaultPermissions = function() {
 
 userSchema.methods.hasPermission = function(module, action) {
   return this.permissions[module] && this.permissions[module][action];
+};
+
+// Role hierarchy validation
+userSchema.methods.canManageRole = function(targetRole) {
+  const roleHierarchy = {
+    'superadministrator': 1,
+    'admin': 2,
+    'manager': 3,
+    'operator': 4,
+    'viewer': 5,
+    'agent': 6
+  };
+  
+  const currentLevel = roleHierarchy[this.role] || 999;
+  const targetLevel = roleHierarchy[targetRole] || 999;
+  
+  return currentLevel < targetLevel;
+};
+
+// Check if user can perform action on another user
+userSchema.methods.canManageUser = function(targetUser) {
+  // Super administrators can manage everyone
+  if (this.role === 'superadministrator') return true;
+  
+  // Users cannot manage themselves
+  if (this._id.toString() === targetUser._id.toString()) return false;
+  
+  // Check role hierarchy
+  return this.canManageRole(targetUser.role);
+};
+
+// Get role permissions (moved from getDefaultPermissions)
+userSchema.methods.getRolePermissions = function() {
+  const rolePermissions = {
+    superadministrator: {
+      dashboard: { view: true, export: true },
+      users: { view: true, create: true, edit: true, delete: true, manageRoles: true },
+      bots: { view: true, create: true, edit: true, delete: true, publish: true },
+      agents: { view: true, create: true, edit: true, delete: true, assign: true },
+      analytics: { view: true, export: true, advanced: true },
+      knowledgeBase: { view: true, upload: true, edit: true, delete: true },
+      settings: { view: true, edit: true, system: true },
+      chat: { view: true, moderate: true, export: true },
+      handoffs: { view: true, accept: true, reject: true, manage: true }
+    },
+    admin: {
+      dashboard: { view: true, export: true },
+      users: { view: true, create: true, edit: true, delete: false, manageRoles: false },
+      bots: { view: true, create: true, edit: true, delete: true, publish: true },
+      agents: { view: true, create: true, edit: true, delete: false, assign: true },
+      analytics: { view: true, export: true, advanced: true },
+      knowledgeBase: { view: true, upload: true, edit: true, delete: false },
+      settings: { view: true, edit: true, system: false },
+      chat: { view: true, moderate: true, export: true },
+      handoffs: { view: true, accept: true, reject: true, manage: true }
+    },
+    manager: {
+      dashboard: { view: true, export: true },
+      users: { view: true, create: false, edit: false, delete: false, manageRoles: false },
+      bots: { view: true, create: true, edit: true, delete: false, publish: false },
+      agents: { view: true, create: false, edit: true, delete: false, assign: true },
+      analytics: { view: true, export: true, advanced: false },
+      knowledgeBase: { view: true, upload: true, edit: true, delete: false },
+      settings: { view: true, edit: false, system: false },
+      chat: { view: true, moderate: true, export: true }
+    },
+    operator: {
+      dashboard: { view: true, export: false },
+      users: { view: false, create: false, edit: false, delete: false, manageRoles: false },
+      bots: { view: true, create: false, edit: true, delete: false, publish: false },
+      agents: { view: true, create: false, edit: false, delete: false, assign: false },
+      analytics: { view: true, export: false, advanced: false },
+      knowledgeBase: { view: true, upload: true, edit: false, delete: false },
+      settings: { view: false, edit: false, system: false },
+      chat: { view: true, moderate: false, export: false },
+      handoffs: { view: true, accept: false, reject: false, manage: false }
+    },
+    viewer: {
+      dashboard: { view: true, export: false },
+      users: { view: false, create: false, edit: false, delete: false, manageRoles: false },
+      bots: { view: true, create: false, edit: false, delete: false, publish: false },
+      agents: { view: false, create: false, edit: false, delete: false, assign: false },
+      analytics: { view: true, export: false, advanced: false },
+      knowledgeBase: { view: true, upload: false, edit: false, delete: false },
+      settings: { view: false, edit: false, system: false },
+      chat: { view: true, moderate: false, export: false },
+      handoffs: { view: true, accept: false, reject: false, manage: false }
+    },
+    agent: {
+      dashboard: { view: true, export: false },
+      users: { view: false, create: false, edit: false, delete: false, manageRoles: false },
+      bots: { view: false, create: false, edit: false, delete: false, publish: false },
+      agents: { view: false, create: false, edit: false, delete: false, assign: false },
+      analytics: { view: true, export: false, advanced: false },
+      knowledgeBase: { view: true, upload: false, edit: false, delete: false },
+      settings: { view: false, edit: false, system: false },
+      chat: { view: true, moderate: true, export: false },
+      handoffs: { view: true, accept: true, reject: true, manage: false }
+    }
+  };
+
+  return rolePermissions[this.role] || rolePermissions.viewer;
+};
+
+// Get effective permissions (combines role permissions with user-specific permissions)
+userSchema.methods.getEffectivePermissions = function() {
+  const rolePermissions = this.getRolePermissions();
+  const userPermissions = this.permissions || {};
+  
+  // Merge role permissions with user-specific permissions
+  const effectivePermissions = {};
+  
+  Object.keys(rolePermissions).forEach(module => {
+    effectivePermissions[module] = { ...rolePermissions[module] };
+    
+    if (userPermissions[module]) {
+      Object.keys(userPermissions[module]).forEach(action => {
+        if (userPermissions[module][action] !== undefined) {
+          effectivePermissions[module][action] = userPermissions[module][action];
+        }
+      });
+    }
+  });
+  
+  return effectivePermissions;
 };
 
 userSchema.methods.softDelete = function(deletedBy) {

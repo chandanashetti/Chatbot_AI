@@ -3,6 +3,12 @@ const router = express.Router();
 const Role = require('../models/Role');
 const User = require('../models/User');
 const { getOrCreateDefaultUser } = require('../utils/userHelper');
+const { 
+  requirePermission, 
+  requireRoleManagement, 
+  requireRole,
+  populateUserPermissions 
+} = require('../middleware/rbac');
 
 // Middleware to ensure user authentication
 const ensureUser = async (req, res, next) => {
@@ -30,7 +36,7 @@ const ensureUser = async (req, res, next) => {
 };
 
 // GET /api/roles - Get all roles
-router.get('/', ensureUser, async (req, res) => {
+router.get('/', ensureUser, requirePermission('roles.view'), async (req, res) => {
   try {
     console.log('📋 Fetching roles...');
     
@@ -190,7 +196,7 @@ router.get('/:id', ensureUser, async (req, res) => {
 });
 
 // POST /api/roles - Create new role
-router.post('/', ensureUser, async (req, res) => {
+router.post('/', ensureUser, requirePermission('roles.create'), async (req, res) => {
   try {
     console.log('👤 Creating new role...');
     
@@ -265,7 +271,7 @@ router.post('/', ensureUser, async (req, res) => {
 });
 
 // PUT /api/roles/:id - Update role
-router.put('/:id', ensureUser, async (req, res) => {
+router.put('/:id', ensureUser, requirePermission('roles.edit'), async (req, res) => {
   try {
     const { id } = req.params;
     console.log(`📝 Updating role ${id}...`);
@@ -355,7 +361,7 @@ router.put('/:id', ensureUser, async (req, res) => {
 });
 
 // DELETE /api/roles/:id - Delete role
-router.delete('/:id', ensureUser, async (req, res) => {
+router.delete('/:id', ensureUser, requirePermission('roles.delete'), async (req, res) => {
   try {
     const { id } = req.params;
     console.log(`🗑️ Deleting role ${id}...`);
@@ -489,7 +495,7 @@ router.patch('/:id/status', ensureUser, async (req, res) => {
 });
 
 // POST /api/roles/initialize - Initialize default system roles
-router.post('/initialize', ensureUser, async (req, res) => {
+router.post('/initialize', ensureUser, requirePermission('roles.create'), async (req, res) => {
   try {
     console.log('🔧 Initializing default system roles...');
     

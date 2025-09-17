@@ -26,7 +26,9 @@ api.interceptors.request.use(
 api.interceptors.response.use(
   (response) => response,
   (error) => {
-    if (error.response?.status === 401) {
+    // Only logout if it's a 401 and we're actually authenticated
+    // This prevents logout on initial failed requests during token validation
+    if (error.response?.status === 401 && store.getState().auth.isAuthenticated) {
       store.dispatch(logout())
     }
     return Promise.reject(error)
@@ -235,8 +237,26 @@ export const agentAPI = {
   getAgentStats: (id: string, period?: string) =>
     api.get(`/agents/${id}/stats`, { params: { period } }),
 
+  // Get agent analytics
+  getAgentAnalytics: (id: string, dateRange?: { start: string; end: string }) =>
+    api.get(`/agents/${id}/analytics`, {
+      params: dateRange ? {
+        startDate: dateRange.start,
+        endDate: dateRange.end
+      } : {}
+    }),
+
   // Get dashboard summary
   getDashboardSummary: () => api.get('/agents/dashboard/summary'),
+
+  // Get current agent profile
+  getCurrentAgent: () => api.get('/agents/me'),
+
+  // Update agent heartbeat
+  updateHeartbeat: () => api.post('/agents/me/heartbeat'),
+
+  // Set agent offline
+  setOffline: () => api.post('/agents/me/offline'),
 }
 
 // Handoff Management API
@@ -295,7 +315,6 @@ export const handoffAPI = {
     api.get('/handoffs/stats/summary', { params: { period } }),
 }
 
-// Users API
 // Roles API
 export const rolesAPI = {
   getRoles: (params?: {
@@ -315,6 +334,8 @@ export const rolesAPI = {
   updateRoleStatus: (id: string, status: string) => api.patch(`/roles/${id}/status`, { status }),
   
   getRoleStats: () => api.get('/roles/stats'),
+  
+  initializeRoles: () => api.post('/roles/initialize'),
 }
 
 export const usersAPI = {
@@ -661,43 +682,113 @@ export const userAPI = {
   getRoles: () => api.get('/users/roles/list'),
 }
 
-// Role Management API
-export const roleAPI = {
-  // Get all roles with filtering
-  getRoles: (params?: {
-    type?: string;
+// Channel Accounts API
+export const channelAccountsAPI = {
+  // Get all channel accounts with filtering
+  getChannelAccounts: (params?: {
+    platform?: string;
     status?: string;
-    search?: string;
-  }) => api.get('/roles', { params }),
+    userId?: string;
+    page?: number;
+    limit?: number;
+    sortBy?: string;
+    sortOrder?: 'asc' | 'desc';
+  }) => api.get('/channel-accounts', { params }),
 
-  // Get role statistics
-  getRoleStats: () => api.get('/roles/stats'),
+  // Get accounts by platform
+  getAccountsByPlatform: (platform: string, params?: {
+    userId?: string;
+    status?: string;
+  }) => api.get(`/channel-accounts/platform/${platform}`, { params }),
 
-  // Get specific role
-  getRole: (id: string) => api.get(`/roles/${id}`),
+  // Get account details
+  getAccountDetails: (id: string) => api.get(`/channel-accounts/${id}`),
 
-  // Create new role
-  createRole: (roleData: {
+  // Create new account
+  createAccount: (accountData: {
+    accountId: string;
     name: string;
-    description?: string;
-    permissions: any;
-    priority?: number;
-    color?: string;
-  }) => api.post('/roles', roleData),
+    platform: string;
+    details?: any;
+    credentials?: any;
+    settings?: any;
+    botId: string;
+    userId: string;
+    organizationId?: string;
+  }) => api.post('/channel-accounts', accountData),
 
-  // Update role
-  updateRole: (id: string, roleData: any) => api.put(`/roles/${id}`, roleData),
+  // Update account
+  updateAccount: (id: string, updateData: any) => api.put(`/channel-accounts/${id}`, updateData),
 
-  // Update role status
-  updateRoleStatus: (id: string, status: 'active' | 'inactive') => 
-    api.patch(`/roles/${id}/status`, { status }),
+  // Delete account
+  deleteAccount: (id: string) => api.delete(`/channel-accounts/${id}`),
 
-  // Delete role
-  deleteRole: (id: string) => api.delete(`/roles/${id}`),
+  // Get account conversations
+  getAccountConversations: (id: string, params?: {
+    status?: string;
+    page?: number;
+    limit?: number;
+    sortBy?: string;
+    sortOrder?: 'asc' | 'desc';
+  }) => api.get(`/channel-accounts/${id}/conversations`, { params }),
 
-  // Initialize default system roles
-  initializeRoles: () => api.post('/roles/initialize'),
+  // Get account analytics
+  getAccountAnalytics: (id: string, params?: {
+    startDate?: string;
+    endDate?: string;
+  }) => api.get(`/channel-accounts/${id}/analytics`, { params }),
 }
+
+// Conversations API
+export const conversationsAPI = {
+  // Get all conversations with filtering
+  getConversations: (params?: {
+    platform?: string;
+    channelAccountId?: string;
+    botId?: string;
+    userId?: string;
+    status?: string;
+    startDate?: string;
+    endDate?: string;
+    page?: number;
+    limit?: number;
+    sortBy?: string;
+    sortOrder?: 'asc' | 'desc';
+    search?: string;
+  }) => api.get('/conversations', { params }),
+
+  // Get conversations by platform
+  getConversationsByPlatform: (platform: string, params?: {
+    channelAccountId?: string;
+    status?: string;
+    startDate?: string;
+    endDate?: string;
+    page?: number;
+    limit?: number;
+  }) => api.get(`/conversations/platform/${platform}`, { params }),
+
+  // Get conversations for specific account
+  getAccountConversations: (accountId: string, params?: {
+    status?: string;
+    startDate?: string;
+    endDate?: string;
+    page?: number;
+    limit?: number;
+  }) => api.get(`/conversations/account/${accountId}`, { params }),
+
+  // Get conversation details
+  getConversationDetails: (id: string) => api.get(`/conversations/${id}`),
+
+  // Get conversation analytics summary
+  getAnalyticsSummary: (params?: {
+    platform?: string;
+    channelAccountId?: string;
+    startDate?: string;
+    endDate?: string;
+  }) => api.get('/conversations/analytics/summary', { params }),
+}
+
+// Role Management API
 
 
 export default api

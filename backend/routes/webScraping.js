@@ -35,6 +35,7 @@ router.get('/settings', async (req, res) => {
     }
     
     console.log('✅ Web scraping settings loaded');
+    console.log('📤 Returning webScraping data with', settings.webScraping?.urls?.length || 0, 'URLs');
     res.json({
       success: true,
       data: {
@@ -153,6 +154,7 @@ router.post('/urls', async (req, res) => {
     // Check if URL already exists
     const existingUrl = settings.webScraping.urls.find(u => u.url === url);
     if (existingUrl) {
+      console.log(`⚠️ URL already exists: ${url} (ID: ${existingUrl.id})`);
       return res.status(400).json({
         success: false,
         error: {
@@ -170,7 +172,8 @@ router.post('/urls', async (req, res) => {
       description: description || '',
       enabled: true,
       lastScraped: null,
-      status: 'pending'
+      scrapingStatus: 'pending',
+      contentLength: 0
     };
     
     settings.webScraping.urls.push(newUrl);
@@ -180,7 +183,9 @@ router.post('/urls', async (req, res) => {
     res.json({
       success: true,
       message: 'URL added successfully',
-      data: newUrl
+      data: {
+        urlEntry: newUrl
+      }
     });
   } catch (error) {
     console.error('❌ Error adding URL:', error);
@@ -276,13 +281,206 @@ router.get('/content', async (req, res) => {
   }
 });
 
+// Scrape specific URL by ID
+router.post('/scrape/:id', async (req, res) => {
+  try {
+    console.log('🌐 Scraping URL...');
+
+    const { id } = req.params;
+
+    // Get current settings to find the URL
+    const settings = await Settings.findOne({ isDefault: true });
+
+    if (!settings || !settings.webScraping) {
+      return res.status(404).json({
+        success: false,
+        error: {
+          code: 'SETTINGS_NOT_FOUND',
+          message: 'Web scraping settings not found'
+        }
+      });
+    }
+
+    // Find the URL entry
+    const urlEntry = settings.webScraping.urls.find(u => u.id === id);
+
+    if (!urlEntry) {
+      return res.status(404).json({
+        success: false,
+        error: {
+          code: 'URL_NOT_FOUND',
+          message: 'URL not found in scraping list'
+        }
+      });
+    }
+
+    console.log(`🌐 Starting scrape for: ${urlEntry.url}`);
+
+    try {
+      // Scrape the URL using WebScraper service
+      const scrapingOptions = {
+        timeout: settings.webScraping.requestTimeout || 10000,
+        userAgent: settings.webScraping.userAgent || 'Mozilla/5.0 (compatible; Chatbot-AI/1.0)',
+        maxContentLength: settings.webScraping.maxContentLength || 100000
+      };
+
+      const scrapeResult = await webScraper.scrapeUrl(urlEntry.url, scrapingOptions);
+
+      if (scrapeResult.status === 'success') {
+        // Save scraped content to database
+        const { v4: uuidv4 } = require('uuid');
+
+        // Create chunks for the scraped content (memory optimized)
+        const chunkText = (text, chunkSize = 1000, overlap = 200) => {
+          const chunks = [];
+          let start = 0;
+          const maxChunks = 50; // Limit chunks to prevent memory issues
+
+          // Ensure text isn't too large
+          const maxTextLength = 50000; // 50KB max
+          if (text.length > maxTextLength) {
+            console.log(`⚠️ Text too long (${text.length}), truncating to ${maxTextLength} chars`);
+            text = text.substring(0, maxTextLength);
+          }
+
+          while (start < text.length && chunks.length < maxChunks) {
+            const end = Math.min(start + chunkSize, text.length);
+            const chunk = text.slice(start, end);
+
+            if (chunk.trim().length > 0) {
+              chunks.push({
+                id: uuidv4(),
+                content: chunk.trim(),
+                metadata: {
+                  chunkIndex: chunks.length,
+                  start,
+                  end,
+                  source: 'web',
+                  url: urlEntry.url
+                }
+              });
+            }
+
+            start = end - overlap;
+            if (start >= text.length) break;
+          }
+
+          console.log(`📝 Created ${chunks.length} chunks from ${text.length} characters`);
+          return chunks;
+        };
+
+        const chunks = chunkText(scrapeResult.content);
+
+        // Save or update scraped content
+        const scrapedContent = await ScrapedContent.findOneAndUpdate(
+          { url: urlEntry.url },
+          {
+            title: scrapeResult.title,
+            description: scrapeResult.description,
+            content: scrapeResult.content,
+            contentLength: scrapeResult.contentLength,
+            chunks: chunks,
+            scrapedAt: scrapeResult.scrapedAt,
+            lastUpdated: new Date(),
+            status: 'success',
+            errorMessage: null,
+            metadata: {
+              userAgent: scrapingOptions.userAgent,
+              responseTime: Date.now(),
+              httpStatus: 200,
+              contentType: 'text/html'
+            }
+          },
+          { upsert: true, new: true }
+        );
+
+        console.log(`✅ Content scraped and saved: ${scrapedContent.contentLength} characters`);
+
+        // Update URL status in settings
+        const urlIndex = settings.webScraping.urls.findIndex(u => u.id === id);
+        if (urlIndex !== -1) {
+          settings.webScraping.urls[urlIndex].lastScraped = new Date();
+          settings.webScraping.urls[urlIndex].scrapingStatus = 'success';
+          settings.webScraping.urls[urlIndex].contentLength = scrapeResult.contentLength;
+          await settings.save();
+        }
+
+        res.json({
+          success: true,
+          message: 'URL scraped successfully',
+          data: {
+            result: {
+              status: 'success',
+              contentLength: scrapeResult.contentLength,
+              title: scrapeResult.title,
+              scrapedAt: scrapeResult.scrapedAt
+            }
+          }
+        });
+
+      } else {
+        // Handle scraping error
+        console.error(`❌ Scraping failed for ${urlEntry.url}:`, scrapeResult.error);
+
+        // Update URL status in settings
+        const urlIndex = settings.webScraping.urls.findIndex(u => u.id === id);
+        if (urlIndex !== -1) {
+          settings.webScraping.urls[urlIndex].scrapingStatus = 'error';
+          await settings.save();
+        }
+
+        res.json({
+          success: false,
+          data: {
+            result: {
+              status: 'error',
+              error: scrapeResult.error
+            }
+          }
+        });
+      }
+
+    } catch (scrapeError) {
+      console.error(`❌ Scraping error for ${urlEntry.url}:`, scrapeError);
+
+      // Update URL status in settings
+      const urlIndex = settings.webScraping.urls.findIndex(u => u.id === id);
+      if (urlIndex !== -1) {
+        settings.webScraping.urls[urlIndex].scrapingStatus = 'error';
+        await settings.save();
+      }
+
+      res.json({
+        success: false,
+        data: {
+          result: {
+            status: 'error',
+            error: scrapeError.message
+          }
+        }
+      });
+    }
+
+  } catch (error) {
+    console.error('❌ Error in scrape endpoint:', error);
+    res.status(500).json({
+      success: false,
+      error: {
+        code: 'SCRAPE_ERROR',
+        message: 'Failed to scrape URL',
+        details: error.message
+      }
+    });
+  }
+});
+
 // Search scraped content (for RAG integration)
 router.post('/search', async (req, res) => {
   try {
     console.log('🔍 Searching scraped content...');
-    
+
     const { query, topK = 5 } = req.body;
-    
+
     if (!query) {
       return res.status(400).json({
         success: false,
@@ -292,7 +490,7 @@ router.post('/search', async (req, res) => {
         }
       });
     }
-    
+
     // Simple text search (can be enhanced with vector search later)
     const results = await ScrapedContent.find({
       $or: [
@@ -304,7 +502,7 @@ router.post('/search', async (req, res) => {
     })
     .select('url title description content scrapedAt')
     .limit(topK);
-    
+
     console.log(`✅ Found ${results.length} matching content items`);
     res.json({
       success: true,

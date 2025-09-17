@@ -6,9 +6,6 @@ import { settingsAPI, openaiAPI, webScrapingAPI } from '../../services/api'
 import { 
   Save, 
   Bot, 
-  Palette, 
-  MessageSquare,
-  Zap,
   Loader2,
   Server,
   Database,
@@ -88,11 +85,11 @@ const AdminSettings = () => {
         
         console.log('📊 General settings loaded:', backendSettings)
         
-        // Load web scraping settings separately  
+        // Load web scraping settings separately
         const webScrapingResponse = await webScrapingAPI.getSettings()
-        const webScrapingData = webScrapingResponse.data?.webScraping || {}
-        
-        console.log('🌐 Web scraping settings loaded:', webScrapingData)
+        const webScrapingData = webScrapingResponse.data?.data?.webScraping || {}
+
+        console.log('🌐 Web scraping settings loaded:', webScrapingData.urls?.length || 0, 'URLs')
         
         // Merge all settings with proper defaults
         const mergedSettings = {
@@ -100,7 +97,9 @@ const AdminSettings = () => {
           ...backendSettings, // Override with backend data
           webScraping: {
             ...settings.webScraping, // Use Redux defaults for web scraping
-            ...webScrapingData // Override with backend web scraping data
+            ...webScrapingData, // Override with backend web scraping data
+            // Ensure URLs from backend take priority
+            urls: webScrapingData.urls || settings.webScraping.urls || []
           }
         }
         
@@ -114,8 +113,10 @@ const AdminSettings = () => {
           setLocalSettings(mergedSettings)
           dispatch(updateSettings(mergedSettings))
           console.log('✅ Settings synchronized successfully')
+          console.log('🔗 URLs in localSettings after sync:', mergedSettings.webScraping.urls.length)
         } else {
           console.log('ℹ️ Settings already up to date')
+          console.log('🔗 URLs in current settings:', settings.webScraping.urls.length)
         }
         
       } catch (error) {
@@ -134,15 +135,6 @@ const AdminSettings = () => {
     }))
   }
 
-  const handleThemeChange = (field: keyof BotSettings['theme'], value: string) => {
-    setLocalSettings((prev: BotSettings) => ({
-      ...prev,
-      theme: {
-        ...prev.theme,
-        [field]: value
-      }
-    }))
-  }
 
   const handleOllamaChange = (field: keyof OllamaSettings, value: any) => {
     setLocalSettings((prev: BotSettings) => ({
@@ -236,9 +228,20 @@ const AdminSettings = () => {
       
       setUrlForm({ url: '', name: '', description: '' })
       toast.success('URL added successfully')
-    } catch (error) {
+    } catch (error: any) {
       console.error('❌ Failed to add URL:', error)
-      toast.error('Failed to add URL')
+
+      // Extract the specific error message from the backend response
+      let errorMessage = 'Failed to add URL'
+      if (error?.response?.data?.error?.message) {
+        errorMessage = error.response.data.error.message
+      } else if (error?.response?.data?.message) {
+        errorMessage = error.response.data.message
+      } else if (error?.message) {
+        errorMessage = error.message
+      }
+
+      toast.error(errorMessage)
     }
   }
 
@@ -276,10 +279,30 @@ const AdminSettings = () => {
       console.log('🌐 Scraping URL...', urlId)
       
       const response = await webScrapingAPI.scrapeUrl(urlId)
-      const result = response.data.result
-      
-      console.log('📊 Scraping result:', result)
-      
+
+      console.log('📊 Full scraping response:', response.data)
+
+      // Handle different response structures
+      let result: any;
+      if (response.data.success === false && response.data.error) {
+        // Error response format: { success: false, error: { ... } }
+        result = {
+          status: 'error',
+          error: response.data.error.message || response.data.error.details || 'Unknown error'
+        }
+      } else if (response.data.data && response.data.data.result) {
+        // Success response format: { success: true, data: { result: { ... } } }
+        result = response.data.data.result
+      } else {
+        // Fallback: treat as error
+        result = {
+          status: 'error',
+          error: 'Invalid response format'
+        }
+      }
+
+      console.log('📊 Processed result:', result)
+
       if (result.status === 'success') {
         setScrapingStatus(prev => ({ ...prev, [urlId]: 'success' }))
         
@@ -858,194 +881,6 @@ const AdminSettings = () => {
           </div>
         )}
 
-        {/* Message Configuration */}
-        <div className="card p-6">
-          <div className="flex items-center space-x-2 mb-4">
-            <MessageSquare className="w-5 h-5 text-primary-600" />
-            <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
-              Message Configuration
-            </h3>
-          </div>
-
-          <div className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                Greeting Message
-              </label>
-              <textarea
-                value={localSettings.greetingMessage}
-                onChange={(e) => handleSettingChange('greetingMessage', e.target.value)}
-                className="input-field"
-                rows={3}
-                placeholder="Enter the greeting message shown to users..."
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                Fallback Message
-              </label>
-              <textarea
-                value={localSettings.fallbackMessage}
-                onChange={(e) => handleSettingChange('fallbackMessage', e.target.value)}
-                className="input-field"
-                rows={3}
-                placeholder="Enter the message shown when the bot cannot respond..."
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                Prompt Template
-              </label>
-              <textarea
-                value={localSettings.promptTemplate}
-                onChange={(e) => handleSettingChange('promptTemplate', e.target.value)}
-                className="input-field"
-                rows={4}
-                placeholder="Enter the system prompt template..."
-              />
-            </div>
-
-            {((localSettings.model === 'ollama' && localSettings.ollama.ragEnabled) || 
-              ((localSettings.model === 'openai' || localSettings.model === 'gpt-3.5-turbo' || localSettings.model === 'gpt-4') && localSettings.openai.ragEnabled)) && (
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  RAG Prompt Template
-                </label>
-                <textarea
-                  value={localSettings.ragPromptTemplate}
-                  onChange={(e) => handleSettingChange('ragPromptTemplate', e.target.value)}
-                  className="input-field"
-                  rows={6}
-                  placeholder="Enter the RAG prompt template with {documents} and {question} placeholders..."
-                />
-                <p className="text-xs text-gray-500 mt-1">
-                  Use <code>{`{documents}`}</code> and <code>{`{question}`}</code> as placeholders for retrieved documents and user question.
-                </p>
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Theme Configuration */}
-        <div className="card p-6">
-          <div className="flex items-center space-x-2 mb-4">
-            <Palette className="w-5 h-5 text-primary-600" />
-            <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
-              Theme Configuration
-            </h3>
-          </div>
-
-          <div className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                Primary Color
-              </label>
-              <div className="flex items-center space-x-2">
-                <input
-                  type="color"
-                  value={localSettings.theme.primaryColor}
-                  onChange={(e) => handleThemeChange('primaryColor', e.target.value)}
-                  className="w-12 h-10 rounded border border-gray-300 dark:border-gray-600"
-                />
-                <input
-                  type="text"
-                  value={localSettings.theme.primaryColor}
-                  onChange={(e) => handleThemeChange('primaryColor', e.target.value)}
-                  className="input-field flex-1"
-                  placeholder="#3b82f6"
-                />
-              </div>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                Secondary Color
-              </label>
-              <div className="flex items-center space-x-2">
-                <input
-                  type="color"
-                  value={localSettings.theme.secondaryColor}
-                  onChange={(e) => handleThemeChange('secondaryColor', e.target.value)}
-                  className="w-12 h-10 rounded border border-gray-300 dark:border-gray-600"
-                />
-                <input
-                  type="text"
-                  value={localSettings.theme.secondaryColor}
-                  onChange={(e) => handleThemeChange('secondaryColor', e.target.value)}
-                  className="input-field flex-1"
-                  placeholder="#64748b"
-                />
-              </div>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                Background Color
-              </label>
-              <div className="flex items-center space-x-2">
-                <input
-                  type="color"
-                  value={localSettings.theme.backgroundColor}
-                  onChange={(e) => handleThemeChange('backgroundColor', e.target.value)}
-                  className="w-12 h-10 rounded border border-gray-300 dark:border-gray-600"
-                />
-                <input
-                  type="text"
-                  value={localSettings.theme.backgroundColor}
-                  onChange={(e) => handleThemeChange('backgroundColor', e.target.value)}
-                  className="input-field flex-1"
-                  placeholder="#ffffff"
-                />
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Preview */}
-        <div className="card p-6">
-          <div className="flex items-center space-x-2 mb-4">
-            <Zap className="w-5 h-5 text-primary-600" />
-            <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
-              Live Preview
-            </h3>
-          </div>
-
-          <div 
-            className="p-4 rounded-lg border"
-            style={{ 
-              backgroundColor: localSettings.theme.backgroundColor,
-              borderColor: localSettings.theme.secondaryColor 
-            }}
-          >
-            <div className="space-y-3">
-              <div 
-                className="p-3 rounded-lg"
-                style={{ backgroundColor: localSettings.theme.primaryColor }}
-              >
-                <p className="text-white text-sm">
-                  {localSettings.greetingMessage}
-                </p>
-              </div>
-              
-              <div className="p-3 rounded-lg bg-gray-100 dark:bg-gray-700">
-                <p className="text-gray-900 dark:text-gray-100 text-sm">
-                  User: How can I help you today?
-                </p>
-              </div>
-              
-              <div 
-                className="p-3 rounded-lg"
-                style={{ backgroundColor: localSettings.theme.primaryColor }}
-              >
-                <p className="text-white text-sm">
-                  I'm here to help! What would you like to know?
-                </p>
-              </div>
-            </div>
-          </div>
-        </div>
       </div>
 
       {/* Web Scraping Configuration */}

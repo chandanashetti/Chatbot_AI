@@ -1,0 +1,21 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(curl:*)",
+      "Bash(npm run dev:*)",
+      "Bash(netstat:*)",
+      "Bash(findstr:*)",
+      "Bash(taskkill:*)",
+      "Bash(npm start)",
+      "Bash(node server.js)",
+      "Bash(node:*)",
+      "Bash(npm run build:*)",
+      "Bash(find:*)",
+      "Bash(PORT=5001 node server.js)",
+      "Bash(tasklist:*)",
+      "Bash(python:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

@@ -1582,6 +1582,299 @@ const BotBuilder = () => {
                 </div>
               )}
 
+              {/* Intent Recognition Configuration */}
+              {selectedNodeData.type === 'intent_recognition' && (
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+                      AI Model
+                    </label>
+                    <select
+                      value={selectedNodeData.data.aiModel || 'gpt-3.5-turbo'}
+                      onChange={(e) => handleNodeUpdate(selectedNodeData.id, {
+                        data: { ...selectedNodeData.data, aiModel: e.target.value }
+                      })}
+                      className="input-field"
+                    >
+                      <option value="gpt-3.5-turbo">GPT-3.5 Turbo</option>
+                      <option value="gpt-4">GPT-4</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+                      Predefined Intents
+                    </label>
+                    <textarea
+                      placeholder="greeting&#10;question&#10;request&#10;complaint&#10;compliment&#10;booking&#10;support&#10;information&#10;goodbye"
+                      value={selectedNodeData.data.intents?.join('\n') || ''}
+                      onChange={(e) => handleNodeUpdate(selectedNodeData.id, {
+                        data: { ...selectedNodeData.data, intents: e.target.value.split('\n').filter((i: string) => i.trim()) }
+                      })}
+                      rows={4}
+                      className="input-field"
+                    />
+                  </div>
+                  <div className="p-3 bg-slate-50 dark:bg-slate-800 rounded-lg">
+                    <h5 className="text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">Intent Variables</h5>
+                    <div className="text-xs text-slate-600 dark:text-slate-400 space-y-1">
+                      <div><code>{'{{detected_intent}}'}</code> - Detected intent name</div>
+                      <div><code>{'{{intent_confidence}}'}</code> - Confidence score (0-1)</div>
+                      <div className="text-xs text-slate-500 mt-1">Use these in conditions to route users</div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Entity Extraction Configuration */}
+              {selectedNodeData.type === 'entity_extraction' && (
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+                      AI Model
+                    </label>
+                    <select
+                      value={selectedNodeData.data.aiModel || 'gpt-3.5-turbo'}
+                      onChange={(e) => handleNodeUpdate(selectedNodeData.id, {
+                        data: { ...selectedNodeData.data, aiModel: e.target.value }
+                      })}
+                      className="input-field"
+                    >
+                      <option value="gpt-3.5-turbo">GPT-3.5 Turbo</option>
+                      <option value="gpt-4">GPT-4</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+                      Entity Types to Extract
+                    </label>
+                    <textarea
+                      placeholder="PERSON&#10;EMAIL&#10;PHONE&#10;DATE&#10;TIME&#10;LOCATION&#10;ORGANIZATION&#10;MONEY&#10;NUMBER&#10;URL"
+                      value={selectedNodeData.data.entityTypes?.join('\n') || ''}
+                      onChange={(e) => handleNodeUpdate(selectedNodeData.id, {
+                        data: { ...selectedNodeData.data, entityTypes: e.target.value.split('\n').filter((t: string) => t.trim()) }
+                      })}
+                      rows={4}
+                      className="input-field"
+                    />
+                  </div>
+                  <div className="p-3 bg-slate-50 dark:bg-slate-800 rounded-lg">
+                    <h5 className="text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">Entity Variables</h5>
+                    <div className="text-xs text-slate-600 dark:text-slate-400 space-y-1">
+                      <div><code>{'{{entity_person}}'}</code> - Extracted person names</div>
+                      <div><code>{'{{entity_email}}'}</code> - Extracted email addresses</div>
+                      <div><code>{'{{extracted_entities}}'}</code> - All entities array</div>
+                      <div className="text-xs text-slate-500 mt-1">Dynamic variables created for each entity type</div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Sentiment Analysis Configuration */}
+              {selectedNodeData.type === 'sentiment_analysis' && (
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+                      AI Model
+                    </label>
+                    <select
+                      value={selectedNodeData.data.aiModel || 'gpt-3.5-turbo'}
+                      onChange={(e) => handleNodeUpdate(selectedNodeData.id, {
+                        data: { ...selectedNodeData.data, aiModel: e.target.value }
+                      })}
+                      className="input-field"
+                    >
+                      <option value="gpt-3.5-turbo">GPT-3.5 Turbo</option>
+                      <option value="gpt-4">GPT-4</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+                      Response Message (optional)
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="I understand you're feeling..."
+                      value={selectedNodeData.data.content || ''}
+                      onChange={(e) => handleNodeUpdate(selectedNodeData.id, {
+                        data: { ...selectedNodeData.data, content: e.target.value }
+                      })}
+                      className="input-field"
+                    />
+                  </div>
+                  <div className="p-3 bg-slate-50 dark:bg-slate-800 rounded-lg">
+                    <h5 className="text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">Sentiment Variables</h5>
+                    <div className="text-xs text-slate-600 dark:text-slate-400 space-y-1">
+                      <div><code>{'{{sentiment}}'}</code> - positive, negative, or neutral</div>
+                      <div><code>{'{{sentiment_confidence}}'}</code> - Confidence score (0-1)</div>
+                      <div><code>{'{{emotions}}'}</code> - Array of detected emotions</div>
+                      <div><code>{'{{sentiment_intensity}}'}</code> - Intensity level (0-1)</div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Language Detection Configuration */}
+              {selectedNodeData.type === 'language_detection' && (
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+                      AI Model
+                    </label>
+                    <select
+                      value={selectedNodeData.data.aiModel || 'gpt-3.5-turbo'}
+                      onChange={(e) => handleNodeUpdate(selectedNodeData.id, {
+                        data: { ...selectedNodeData.data, aiModel: e.target.value }
+                      })}
+                      className="input-field"
+                    >
+                      <option value="gpt-3.5-turbo">GPT-3.5 Turbo</option>
+                      <option value="gpt-4">GPT-4</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+                      Response Message (optional)
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="Language detected: {{language_name}}"
+                      value={selectedNodeData.data.content || ''}
+                      onChange={(e) => handleNodeUpdate(selectedNodeData.id, {
+                        data: { ...selectedNodeData.data, content: e.target.value }
+                      })}
+                      className="input-field"
+                    />
+                  </div>
+                  <div className="p-3 bg-slate-50 dark:bg-slate-800 rounded-lg">
+                    <h5 className="text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">Language Variables</h5>
+                    <div className="text-xs text-slate-600 dark:text-slate-400 space-y-1">
+                      <div><code>{'{{detected_language}}'}</code> - Language code (en, es, fr, etc.)</div>
+                      <div><code>{'{{language_name}}'}</code> - Full language name</div>
+                      <div><code>{'{{language_confidence}}'}</code> - Detection confidence (0-1)</div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Translation Configuration */}
+              {selectedNodeData.type === 'translation' && (
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+                      AI Model
+                    </label>
+                    <select
+                      value={selectedNodeData.data.aiModel || 'gpt-3.5-turbo'}
+                      onChange={(e) => handleNodeUpdate(selectedNodeData.id, {
+                        data: { ...selectedNodeData.data, aiModel: e.target.value }
+                      })}
+                      className="input-field"
+                    >
+                      <option value="gpt-3.5-turbo">GPT-3.5 Turbo</option>
+                      <option value="gpt-4">GPT-4</option>
+                    </select>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+                        Source Language
+                      </label>
+                      <select
+                        value={selectedNodeData.data.sourceLanguage || 'auto'}
+                        onChange={(e) => handleNodeUpdate(selectedNodeData.id, {
+                          data: { ...selectedNodeData.data, sourceLanguage: e.target.value }
+                        })}
+                        className="input-field"
+                      >
+                        <option value="auto">Auto-detect</option>
+                        <option value="en">English</option>
+                        <option value="es">Spanish</option>
+                        <option value="fr">French</option>
+                        <option value="de">German</option>
+                        <option value="it">Italian</option>
+                        <option value="pt">Portuguese</option>
+                        <option value="ru">Russian</option>
+                        <option value="zh">Chinese</option>
+                        <option value="ja">Japanese</option>
+                        <option value="ko">Korean</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+                        Target Language
+                      </label>
+                      <select
+                        value={selectedNodeData.data.targetLanguage || 'en'}
+                        onChange={(e) => handleNodeUpdate(selectedNodeData.id, {
+                          data: { ...selectedNodeData.data, targetLanguage: e.target.value }
+                        })}
+                        className="input-field"
+                      >
+                        <option value="en">English</option>
+                        <option value="es">Spanish</option>
+                        <option value="fr">French</option>
+                        <option value="de">German</option>
+                        <option value="it">Italian</option>
+                        <option value="pt">Portuguese</option>
+                        <option value="ru">Russian</option>
+                        <option value="zh">Chinese</option>
+                        <option value="ja">Japanese</option>
+                        <option value="ko">Korean</option>
+                      </select>
+                    </div>
+                  </div>
+                  <div>
+                    <label className="flex items-center space-x-2">
+                      <input
+                        type="checkbox"
+                        checked={selectedNodeData.data.translateUserMessage !== false}
+                        onChange={(e) => handleNodeUpdate(selectedNodeData.id, {
+                          data: { ...selectedNodeData.data, translateUserMessage: e.target.checked }
+                        })}
+                        className="rounded"
+                      />
+                      <span className="text-sm text-slate-700 dark:text-slate-300">Translate user's message</span>
+                    </label>
+                  </div>
+                  <div>
+                    <label className="flex items-center space-x-2">
+                      <input
+                        type="checkbox"
+                        checked={selectedNodeData.data.showTranslation !== false}
+                        onChange={(e) => handleNodeUpdate(selectedNodeData.id, {
+                          data: { ...selectedNodeData.data, showTranslation: e.target.checked }
+                        })}
+                        className="rounded"
+                      />
+                      <span className="text-sm text-slate-700 dark:text-slate-300">Show translation to user</span>
+                    </label>
+                  </div>
+                  {!selectedNodeData.data.translateUserMessage && (
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+                        Static Text to Translate
+                      </label>
+                      <textarea
+                        placeholder="Enter text to translate..."
+                        value={selectedNodeData.data.textToTranslate || ''}
+                        onChange={(e) => handleNodeUpdate(selectedNodeData.id, {
+                          data: { ...selectedNodeData.data, textToTranslate: e.target.value }
+                        })}
+                        rows={2}
+                        className="input-field"
+                      />
+                    </div>
+                  )}
+                  <div className="p-3 bg-slate-50 dark:bg-slate-800 rounded-lg">
+                    <h5 className="text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">Translation Variables</h5>
+                    <div className="text-xs text-slate-600 dark:text-slate-400 space-y-1">
+                      <div><code>{'{{translated_text}}'}</code> - The translated text</div>
+                      <div><code>{'{{translation_confidence}}'}</code> - Translation quality score</div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {/* Input Validation */}
               {(['email_input', 'phone_input', 'number_input', 'input'].includes(selectedNodeData.type)) && (
                 <div>
@@ -1774,6 +2067,351 @@ const BotBuilder = () => {
                       />
                     </div>
                   )}
+                </div>
+              )}
+
+              {/* Survey Configuration */}
+              {selectedNodeData.type === 'survey' && (
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+                      Survey Questions
+                    </label>
+                    <div className="space-y-3">
+                      {(selectedNodeData.data.surveyQuestions || []).map((question: any, index: number) => (
+                        <div key={index} className="p-3 border border-slate-200 dark:border-slate-600 rounded-lg space-y-2">
+                          <div className="flex items-center justify-between">
+                            <span className="text-sm font-medium text-slate-700 dark:text-slate-300">
+                              Question {index + 1}
+                            </span>
+                            <button
+                              onClick={() => {
+                                const newQuestions = (selectedNodeData.data.surveyQuestions || []).filter((_: any, i: number) => i !== index)
+                                handleNodeUpdate(selectedNodeData.id, {
+                                  data: { ...selectedNodeData.data, surveyQuestions: newQuestions }
+                                })
+                              }}
+                              className="text-red-500 hover:text-red-700 text-xs"
+                            >
+                              ×
+                            </button>
+                          </div>
+                          <input
+                            type="text"
+                            placeholder="Enter your question..."
+                            value={question.question || ''}
+                            onChange={(e) => {
+                              const newQuestions = [...(selectedNodeData.data.surveyQuestions || [])]
+                              newQuestions[index] = { ...question, question: e.target.value }
+                              handleNodeUpdate(selectedNodeData.id, {
+                                data: { ...selectedNodeData.data, surveyQuestions: newQuestions }
+                              })
+                            }}
+                            className="input-field text-sm"
+                          />
+                          <div className="flex space-x-2">
+                            <select
+                              value={question.type || 'text'}
+                              onChange={(e) => {
+                                const newQuestions = [...(selectedNodeData.data.surveyQuestions || [])]
+                                newQuestions[index] = { ...question, type: e.target.value }
+                                handleNodeUpdate(selectedNodeData.id, {
+                                  data: { ...selectedNodeData.data, surveyQuestions: newQuestions }
+                                })
+                              }}
+                              className="input-field text-xs flex-1"
+                            >
+                              <option value="text">Text</option>
+                              <option value="multiple_choice">Multiple Choice</option>
+                              <option value="rating">Rating</option>
+                              <option value="yes_no">Yes/No</option>
+                            </select>
+                            <label className="flex items-center text-xs">
+                              <input
+                                type="checkbox"
+                                checked={question.required || false}
+                                onChange={(e) => {
+                                  const newQuestions = [...(selectedNodeData.data.surveyQuestions || [])]
+                                  newQuestions[index] = { ...question, required: e.target.checked }
+                                  handleNodeUpdate(selectedNodeData.id, {
+                                    data: { ...selectedNodeData.data, surveyQuestions: newQuestions }
+                                  })
+                                }}
+                                className="mr-1"
+                              />
+                              Required
+                            </label>
+                          </div>
+                          {question.type === 'multiple_choice' && (
+                            <div className="space-y-1">
+                              <label className="text-xs text-slate-600 dark:text-slate-400">Options:</label>
+                              <textarea
+                                placeholder="Option 1&#10;Option 2&#10;Option 3"
+                                value={question.options?.join('\n') || ''}
+                                onChange={(e) => {
+                                  const newQuestions = [...(selectedNodeData.data.surveyQuestions || [])]
+                                  newQuestions[index] = { ...question, options: e.target.value.split('\n').filter((o: string) => o.trim()) }
+                                  handleNodeUpdate(selectedNodeData.id, {
+                                    data: { ...selectedNodeData.data, surveyQuestions: newQuestions }
+                                  })
+                                }}
+                                rows={2}
+                                className="input-field text-xs"
+                              />
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                      <button
+                        onClick={() => {
+                          const newQuestion = {
+                            question: '',
+                            type: 'text' as const,
+                            required: false,
+                            options: []
+                          }
+                          const newQuestions = [...(selectedNodeData.data.surveyQuestions || []), newQuestion]
+                          handleNodeUpdate(selectedNodeData.id, {
+                            data: { ...selectedNodeData.data, surveyQuestions: newQuestions }
+                          })
+                        }}
+                        className="w-full p-2 border-2 border-dashed border-slate-300 dark:border-slate-600 rounded-lg text-slate-500 hover:border-primary-300 hover:text-primary-600 text-sm"
+                      >
+                        + Add Question
+                      </button>
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+                      Completion Message
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="Thank you for your feedback!"
+                      value={selectedNodeData.data.completionMessage || ''}
+                      onChange={(e) => handleNodeUpdate(selectedNodeData.id, {
+                        data: { ...selectedNodeData.data, completionMessage: e.target.value }
+                      })}
+                      className="input-field"
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* Location Configuration */}
+              {selectedNodeData.type === 'location' && (
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+                      Input Method
+                    </label>
+                    <select
+                      value={selectedNodeData.data.inputMethod || 'text'}
+                      onChange={(e) => handleNodeUpdate(selectedNodeData.id, {
+                        data: { ...selectedNodeData.data, inputMethod: e.target.value as 'text' | 'coordinates' | 'address' | 'map' }
+                      })}
+                      className="input-field"
+                    >
+                      <option value="text">Text (address or coordinates)</option>
+                      <option value="coordinates">Coordinates only</option>
+                      <option value="address">Address only</option>
+                      <option value="map">Map picker</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+                      Prompt Message
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="Please share your location"
+                      value={selectedNodeData.data.content || ''}
+                      onChange={(e) => handleNodeUpdate(selectedNodeData.id, {
+                        data: { ...selectedNodeData.data, content: e.target.value }
+                      })}
+                      className="input-field"
+                    />
+                  </div>
+                  <div className="p-3 bg-slate-50 dark:bg-slate-800 rounded-lg">
+                    <h5 className="text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">Location Variables</h5>
+                    <div className="text-xs text-slate-600 dark:text-slate-400 space-y-1">
+                      <div><code>{'{{location}}'}</code> - Full location object</div>
+                      <div><code>{'{{location_raw}}'}</code> - Raw user input</div>
+                      <div className="text-xs text-slate-500 mt-1">These variables will be available in subsequent nodes</div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* QR Code Configuration */}
+              {selectedNodeData.type === 'qr_code' && (
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+                      QR Code Type
+                    </label>
+                    <select
+                      value={selectedNodeData.data.qrCodeType || 'text'}
+                      onChange={(e) => handleNodeUpdate(selectedNodeData.id, {
+                        data: { ...selectedNodeData.data, qrCodeType: e.target.value as 'text' | 'url' | 'json' | 'custom' }
+                      })}
+                      className="input-field"
+                    >
+                      <option value="text">Text/String</option>
+                      <option value="url">URL/Link</option>
+                      <option value="json">JSON Data</option>
+                      <option value="custom">Custom Format</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="flex items-center space-x-2">
+                      <input
+                        type="checkbox"
+                        checked={selectedNodeData.data.allowManualInput !== false}
+                        onChange={(e) => handleNodeUpdate(selectedNodeData.id, {
+                          data: { ...selectedNodeData.data, allowManualInput: e.target.checked }
+                        })}
+                        className="rounded"
+                      />
+                      <span className="text-sm text-slate-700 dark:text-slate-300">Allow manual text input</span>
+                    </label>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+                      Prompt Message
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="Please scan the QR code"
+                      value={selectedNodeData.data.content || ''}
+                      onChange={(e) => handleNodeUpdate(selectedNodeData.id, {
+                        data: { ...selectedNodeData.data, content: e.target.value }
+                      })}
+                      className="input-field"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+                      Validation Pattern (optional)
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="^https://.*"
+                      value={selectedNodeData.data.validation?.pattern || ''}
+                      onChange={(e) => handleNodeUpdate(selectedNodeData.id, {
+                        data: { 
+                          ...selectedNodeData.data, 
+                          validation: { 
+                            type: 'regex' as const,
+                            ...selectedNodeData.data.validation,
+                            pattern: e.target.value 
+                          }
+                        }
+                      })}
+                      className="input-field"
+                    />
+                  </div>
+                  <div className="p-3 bg-slate-50 dark:bg-slate-800 rounded-lg">
+                    <h5 className="text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">QR Variables</h5>
+                    <div className="text-xs text-slate-600 dark:text-slate-400 space-y-1">
+                      <div><code>{'{{qr_code_data}}'}</code> - Raw QR data</div>
+                      <div><code>{'{{qr_parsed_data}}'}</code> - Parsed data object</div>
+                      <div className="text-xs text-slate-500 mt-1">Parsed data includes URL components, JSON fields, etc.</div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Date/Time Input Configuration */}
+              {(['date_input', 'time_input'].includes(selectedNodeData.type)) && (
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+                      Prompt Message
+                    </label>
+                    <input
+                      type="text"
+                      placeholder={selectedNodeData.type === 'date_input' ? 'Please provide a date' : 'Please provide a time'}
+                      value={selectedNodeData.data.content || ''}
+                      onChange={(e) => handleNodeUpdate(selectedNodeData.id, {
+                        data: { ...selectedNodeData.data, content: e.target.value }
+                      })}
+                      className="input-field"
+                    />
+                  </div>
+                  {selectedNodeData.type === 'date_input' && (
+                    <div className="space-y-3">
+                      <div>
+                        <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+                          Preferred Date Format
+                        </label>
+                        <select
+                          value={selectedNodeData.data.dateFormat || 'YYYY-MM-DD'}
+                          onChange={(e) => handleNodeUpdate(selectedNodeData.id, {
+                            data: { ...selectedNodeData.data, dateFormat: e.target.value }
+                          })}
+                          className="input-field"
+                        >
+                          <option value="YYYY-MM-DD">YYYY-MM-DD (2024-03-15)</option>
+                          <option value="MM/DD/YYYY">MM/DD/YYYY (03/15/2024)</option>
+                          <option value="DD/MM/YYYY">DD/MM/YYYY (15/03/2024)</option>
+                        </select>
+                      </div>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+                            Min Date (optional)
+                          </label>
+                          <input
+                            type="date"
+                            value={selectedNodeData.data.minDate || ''}
+                            onChange={(e) => handleNodeUpdate(selectedNodeData.id, {
+                              data: { ...selectedNodeData.data, minDate: e.target.value }
+                            })}
+                            className="input-field"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+                            Max Date (optional)
+                          </label>
+                          <input
+                            type="date"
+                            value={selectedNodeData.data.maxDate || ''}
+                            onChange={(e) => handleNodeUpdate(selectedNodeData.id, {
+                              data: { ...selectedNodeData.data, maxDate: e.target.value }
+                            })}
+                            className="input-field"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                  {selectedNodeData.type === 'time_input' && (
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+                        Time Format
+                      </label>
+                      <select
+                        value={selectedNodeData.data.timeFormat || '24h'}
+                        onChange={(e) => handleNodeUpdate(selectedNodeData.id, {
+                          data: { ...selectedNodeData.data, timeFormat: e.target.value }
+                        })}
+                        className="input-field"
+                      >
+                        <option value="24h">24-hour (14:30)</option>
+                        <option value="12h">12-hour (2:30 PM)</option>
+                        <option value="both">Accept both formats</option>
+                      </select>
+                    </div>
+                  )}
+                  <div className="p-3 bg-slate-50 dark:bg-slate-800 rounded-lg">
+                    <h5 className="text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">Variables</h5>
+                    <div className="text-xs text-slate-600 dark:text-slate-400 space-y-1">
+                      <div><code>{selectedNodeData.type === 'date_input' ? '{{date}}' : '{{time}}'}</code> - User input value</div>
+                      <div className="text-xs text-slate-500 mt-1">Automatically validated and stored</div>
+                    </div>
+                  </div>
                 </div>
               )}
 

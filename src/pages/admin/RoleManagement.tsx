@@ -1,21 +1,20 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
+import { useSelector } from 'react-redux';
 import {
   Plus,
   Search,
-  Filter,
   Edit,
   Trash2,
   Users,
   Shield,
   Activity,
   Settings,
-  Eye,
-  EyeOff,
-  Check,
   X,
   AlertTriangle
 } from 'lucide-react';
 import { toast } from 'react-hot-toast';
+import { rolesAPI } from '../../services/api';
+import { RootState } from '../../store/store';
 
 interface Permission {
   view?: boolean;
@@ -30,6 +29,9 @@ interface Permission {
   assign?: boolean;
   moderate?: boolean;
   publish?: boolean;
+  accept?: boolean;
+  reject?: boolean;
+  manage?: boolean;
 }
 
 interface RolePermissions {
@@ -41,6 +43,7 @@ interface RolePermissions {
   knowledgeBase: Permission;
   settings: Permission;
   chat: Permission;
+  handoffs: Permission;
 }
 
 interface Role {
@@ -77,6 +80,9 @@ interface RoleStats {
 }
 
 const RoleManagement = () => {
+  const { user } = useSelector((state: RootState) => state.auth);
+  const userPermissions = user?.permissions || {};
+
   const [roles, setRoles] = useState<Role[]>([]);
   const [stats, setStats] = useState<RoleStats>({
     totalRoles: 0,
@@ -111,12 +117,15 @@ const RoleManagement = () => {
       analytics: { view: false, export: false, advanced: false },
       knowledgeBase: { view: false, upload: false, edit: false, delete: false },
       settings: { view: false, edit: false, system: false },
-      chat: { view: false, moderate: false, export: false }
+      chat: { view: false, moderate: false, export: false },
+      handoffs: { view: false, accept: false, reject: false, manage: false }
     } as RolePermissions
   });
 
   // Load data on component mount
   useEffect(() => {
+    console.log('🔐 User permissions:', userPermissions);
+    console.log('👤 Current user:', user);
     loadRoles();
     loadStats();
   }, [filters]);
@@ -124,23 +133,37 @@ const RoleManagement = () => {
   const loadRoles = async () => {
     try {
       setIsLoading(true);
-      const queryParams = new URLSearchParams();
-      
-      if (filters.search) queryParams.append('search', filters.search);
-      if (filters.type !== 'all') queryParams.append('type', filters.type);
-      if (filters.status !== 'all') queryParams.append('status', filters.status);
+      console.log('📋 Loading roles...');
 
-      const response = await fetch(`/api/roles?${queryParams.toString()}`);
-      const data = await response.json();
+      const params: any = {};
+      if (filters.search) params.search = filters.search;
+      if (filters.type !== 'all') params.type = filters.type;
+      if (filters.status !== 'all') params.status = filters.status;
 
-      if (data.success) {
-        setRoles(data.data.roles);
+      const response = await rolesAPI.getRoles(params);
+      console.log('✅ Roles response:', response.data);
+
+      if (response.data.success) {
+        setRoles(response.data.data.roles);
+        console.log('📊 Loaded roles:', response.data.data.roles.length);
       } else {
-        toast.error('Failed to load roles');
+        const errorMessage = response.data.error?.message || 'Failed to load roles';
+        console.error('❌ Load roles error:', response.data.error);
+        toast.error(errorMessage);
       }
     } catch (error) {
-      console.error('Error loading roles:', error);
-      toast.error('Failed to load roles');
+      console.error('❌ Error loading roles:', error);
+
+      // Handle specific error types
+      if (error.response?.status === 401) {
+        toast.error('Authentication required. Please log in again.');
+      } else if (error.response?.status === 403) {
+        toast.error('You do not have permission to view roles.');
+      } else if (error.response?.data?.error?.message) {
+        toast.error(error.response.data.error.message);
+      } else {
+        toast.error('Failed to load roles. Please try again.');
+      }
     } finally {
       setIsLoading(false);
     }
@@ -148,14 +171,15 @@ const RoleManagement = () => {
 
   const loadStats = async () => {
     try {
-      const response = await fetch('/api/roles/stats');
-      const data = await response.json();
+      console.log('📊 Loading role statistics...');
+      const response = await rolesAPI.getRoleStats();
+      console.log('✅ Stats response:', response.data);
 
-      if (data.success) {
-        setStats(data.data);
+      if (response.data.success) {
+        setStats(response.data.data);
       }
     } catch (error) {
-      console.error('Error loading role stats:', error);
+      console.error('❌ Error loading role stats:', error);
     }
   };
 
@@ -166,27 +190,21 @@ const RoleManagement = () => {
         return;
       }
 
-      const response = await fetch('/api/roles', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(roleForm),
-      });
+      console.log('👤 Creating new role:', roleForm);
+      const response = await rolesAPI.createRole(roleForm);
+      console.log('✅ Create role response:', response.data);
 
-      const data = await response.json();
-
-      if (data.success) {
+      if (response.data.success) {
         toast.success('Role created successfully');
         setShowCreateModal(false);
         resetForm();
         loadRoles();
         loadStats();
       } else {
-        toast.error(data.error?.message || 'Failed to create role');
+        toast.error(response.data.error?.message || 'Failed to create role');
       }
     } catch (error) {
-      console.error('Error creating role:', error);
+      console.error('❌ Error creating role:', error);
       toast.error('Failed to create role');
     }
   };
@@ -195,27 +213,21 @@ const RoleManagement = () => {
     if (!selectedRole) return;
 
     try {
-      const response = await fetch(`/api/roles/${selectedRole._id}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(roleForm),
-      });
+      console.log('✏️ Updating role:', selectedRole._id, roleForm);
+      const response = await rolesAPI.updateRole(selectedRole._id, roleForm);
+      console.log('✅ Update role response:', response.data);
 
-      const data = await response.json();
-
-      if (data.success) {
+      if (response.data.success) {
         toast.success('Role updated successfully');
         setShowEditModal(false);
         setSelectedRole(null);
         resetForm();
         loadRoles();
       } else {
-        toast.error(data.error?.message || 'Failed to update role');
+        toast.error(response.data.error?.message || 'Failed to update role');
       }
     } catch (error) {
-      console.error('Error updating role:', error);
+      console.error('❌ Error updating role:', error);
       toast.error('Failed to update role');
     }
   };
@@ -224,49 +236,72 @@ const RoleManagement = () => {
     if (!selectedRole) return;
 
     try {
-      const response = await fetch(`/api/roles/${selectedRole._id}`, {
-        method: 'DELETE',
-      });
+      console.log('🗑️ Deleting role:', selectedRole._id);
+      const response = await rolesAPI.deleteRole(selectedRole._id);
+      console.log('✅ Delete role response:', response.data);
 
-      const data = await response.json();
-
-      if (data.success) {
+      if (response.data.success) {
         toast.success('Role deleted successfully');
         setShowDeleteModal(false);
         setSelectedRole(null);
         loadRoles();
         loadStats();
       } else {
-        toast.error(data.error?.message || 'Failed to delete role');
+        toast.error(response.data.error?.message || 'Failed to delete role');
       }
     } catch (error) {
-      console.error('Error deleting role:', error);
+      console.error('❌ Error deleting role:', error);
       toast.error('Failed to delete role');
     }
   };
 
   const handleStatusChange = async (role: Role, newStatus: string) => {
     try {
-      const response = await fetch(`/api/roles/${role._id}/status`, {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ status: newStatus }),
-      });
+      console.log('🔄 Updating role status:', role._id, newStatus);
+      const response = await rolesAPI.updateRoleStatus(role._id, newStatus);
+      console.log('✅ Status update response:', response.data);
 
-      const data = await response.json();
-
-      if (data.success) {
+      if (response.data.success) {
         toast.success(`Role ${newStatus === 'active' ? 'activated' : 'deactivated'}`);
         loadRoles();
         loadStats();
       } else {
-        toast.error(data.error?.message || 'Failed to update role status');
+        toast.error(response.data.error?.message || 'Failed to update role status');
       }
     } catch (error) {
-      console.error('Error updating role status:', error);
+      console.error('❌ Error updating role status:', error);
       toast.error('Failed to update role status');
+    }
+  };
+
+  const handleInitializeRoles = async () => {
+    try {
+      console.log('🔧 Initializing default system roles...');
+      const response = await rolesAPI.initializeRoles();
+      console.log('✅ Initialize roles response:', response.data);
+
+      if (response.data.success) {
+        toast.success('Default system roles initialized successfully');
+        loadRoles();
+        loadStats();
+      } else {
+        const errorMessage = response.data.error?.message || 'Failed to initialize roles';
+        console.error('❌ Initialize roles error:', response.data.error);
+        toast.error(errorMessage);
+      }
+    } catch (error) {
+      console.error('❌ Error initializing roles:', error);
+
+      // Handle specific error types
+      if (error.response?.status === 401) {
+        toast.error('Authentication required. Please log in again.');
+      } else if (error.response?.status === 403) {
+        toast.error('You do not have permission to initialize roles.');
+      } else if (error.response?.data?.error?.message) {
+        toast.error(error.response.data.error.message);
+      } else {
+        toast.error('Failed to initialize roles. Please try again.');
+      }
     }
   };
 
@@ -283,7 +318,8 @@ const RoleManagement = () => {
         analytics: { view: false, export: false, advanced: false },
         knowledgeBase: { view: false, upload: false, edit: false, delete: false },
         settings: { view: false, edit: false, system: false },
-        chat: { view: false, moderate: false, export: false }
+        chat: { view: false, moderate: false, export: false },
+        handoffs: { view: false, accept: false, reject: false, manage: false }
       }
     });
   };
@@ -360,6 +396,15 @@ const RoleManagement = () => {
           </p>
         </div>
         
+        {(userPermissions.users?.manageRoles || userPermissions.users?.create) && (
+          <button
+            onClick={handleInitializeRoles}
+            className="flex items-center space-x-2 bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg transition-colors"
+          >
+            <Settings className="w-4 h-4" />
+            <span>Initialize Default Roles</span>
+          </button>
+        )}
         <button
           onClick={() => setShowCreateModal(true)}
           className="flex items-center space-x-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg transition-colors"

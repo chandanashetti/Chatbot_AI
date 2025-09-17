@@ -6,7 +6,22 @@ const botNodeSchema = new mongoose.Schema({
   type: { 
     type: String, 
     required: true,
-    enum: ['message', 'question', 'condition', 'action', 'webhook', 'handoff']
+    enum: [
+      // Basic nodes
+      'message', 'question', 'condition', 'action', 'webhook', 'handoff',
+      // Additional flow nodes
+      'quick_replies', 'input', 'random', 'delay', 'variable', 'validation',
+      // AI & Intelligence nodes
+      'ai_response', 'intent_recognition', 'entity_extraction', 'sentiment_analysis', 
+      'language_detection', 'translation',
+      // Media nodes
+      'image', 'video', 'audio', 'document',
+      // Form input nodes
+      'email_input', 'phone_input', 'number_input', 'rating',
+      'date_input', 'time_input', 'survey', 'location', 'qr_code',
+      // Analytics & tracking
+      'analytics_event'
+    ]
   },
   position: {
     x: { type: Number, required: true },
@@ -29,6 +44,93 @@ const botNodeSchema = new mongoose.Schema({
       body: mongoose.Schema.Types.Mixed
     }, // For webhook nodes
     variables: [String], // Variables to collect/store
+    
+    // AI & Intelligence node configurations
+    aiPrompt: String, // Custom AI prompt for ai_response nodes
+    aiModel: String, // AI model to use (gpt-3.5-turbo, gpt-4, etc.)
+    temperature: Number, // AI temperature setting
+    
+    // Intent recognition configuration
+    intents: [String], // Predefined intents for intent_recognition nodes
+    
+    // Entity extraction configuration
+    entityTypes: [String], // Entity types to extract (PERSON, EMAIL, etc.)
+    
+    // Translation configuration
+    sourceLanguage: String, // Source language for translation
+    targetLanguage: String, // Target language for translation
+    translateUserMessage: { type: Boolean, default: true }, // Whether to translate user input
+    textToTranslate: String, // Static text to translate
+    showTranslation: { type: Boolean, default: true }, // Whether to show translation result
+    
+    // Form validation configuration
+    validation: {
+      type: { type: String, enum: ['email', 'phone', 'number', 'url', 'regex', 'none'] },
+      pattern: String, // Regex pattern for custom validation
+      message: String // Error message for validation failure
+    },
+    
+    // Input configuration
+    variableName: String, // Variable name to store input
+    
+    // Rating configuration
+    ratingScale: { type: Number, default: 5 }, // Rating scale (1-5, 1-10, etc.)
+    ratingLabels: [String], // Labels for rating options
+    
+    // Quick replies configuration
+    buttons: [{
+      title: String,
+      value: String,
+      payload: String
+    }],
+    
+    // Media configuration
+    mediaUrl: String, // URL for media files
+    mediaType: String, // Type of media (image, video, audio, document)
+    
+    // Variable node configuration
+    variableValue: String, // Value to set for variable
+    
+    // Delay configuration
+    delayDuration: { type: Number, default: 3 }, // Delay in seconds
+    
+    // Analytics event configuration
+    eventName: String, // Name of the analytics event
+    eventProperties: mongoose.Schema.Types.Mixed, // Event properties
+    
+    // Action type configuration
+    actionType: String, // Type of action (collect_email, collect_phone, save_lead, etc.)
+    
+    // Handoff configuration
+    reason: String, // Reason for handoff
+    
+    // Survey configuration
+    surveyQuestions: [{
+      question: String,
+      type: { type: String, enum: ['text', 'multiple_choice', 'rating', 'yes_no'], default: 'text' },
+      options: [String], // For multiple choice questions
+      required: { type: Boolean, default: false },
+      validation: {
+        type: { type: String, enum: ['email', 'phone', 'number', 'url', 'regex', 'none'] },
+        pattern: String,
+        message: String
+      }
+    }],
+    completionMessage: String, // Message shown when survey is completed
+    
+    // Location configuration
+    inputMethod: { type: String, enum: ['text', 'coordinates', 'address', 'map'], default: 'text' },
+    
+    // QR Code configuration
+    qrCodeType: { type: String, enum: ['url', 'json', 'text', 'custom'], default: 'text' },
+    allowManualInput: { type: Boolean, default: true }, // Allow typing QR data manually
+    
+    // Date/Time input configuration
+    dateFormat: { type: String, default: 'YYYY-MM-DD' }, // Preferred date format
+    timeFormat: { type: String, default: '24h' }, // 12h or 24h
+    minDate: Date, // Minimum allowed date
+    maxDate: Date, // Maximum allowed date
+    
     metadata: mongoose.Schema.Types.Mixed // Additional node-specific data
   }
 }, { _id: false });

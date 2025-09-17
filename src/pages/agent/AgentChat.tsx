@@ -8,14 +8,11 @@ import {
   Video,
   Info,
   AlertTriangle,
-  CheckCircle,
-  Clock,
   ArrowLeft,
   User,
   Bot,
   Globe,
   MessageSquare,
-  Star,
   Flag
 } from 'lucide-react';
 import { handoffAPI } from '../../services/api';

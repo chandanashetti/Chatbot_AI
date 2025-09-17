@@ -189,6 +189,16 @@ class BotRuntime {
       // AI & intelligence
       case 'ai_response':
         return await this.processAIResponseNode(currentNode, conversation, userMessage);
+      case 'intent_recognition':
+        return await this.processIntentRecognitionNode(currentNode, conversation, userMessage);
+      case 'entity_extraction':
+        return await this.processEntityExtractionNode(currentNode, conversation, userMessage);
+      case 'sentiment_analysis':
+        return await this.processSentimentAnalysisNode(currentNode, conversation, userMessage);
+      case 'language_detection':
+        return await this.processLanguageDetectionNode(currentNode, conversation, userMessage);
+      case 'translation':
+        return await this.processTranslationNode(currentNode, conversation, userMessage);
       
       // Media & rich content
       case 'image':
@@ -202,7 +212,15 @@ class BotRuntime {
       case 'phone_input':
       case 'number_input':
       case 'rating':
+      case 'date_input':
+      case 'time_input':
         return await this.processFormInputNode(currentNode, conversation, userMessage);
+      case 'survey':
+        return await this.processSurveyNode(currentNode, conversation, userMessage);
+      case 'location':
+        return await this.processLocationNode(currentNode, conversation, userMessage);
+      case 'qr_code':
+        return await this.processQRCodeNode(currentNode, conversation, userMessage);
       
       // Integrations
       case 'webhook':
@@ -501,19 +519,39 @@ class BotRuntime {
 
       let context = '';
       let searchResults = [];
+      let hasRelevantData = false;
 
-      // Use RAG if enabled
+      // GUARD RAIL 1: Use RAG (uploaded documents) if enabled
       if (this.bot.settings.ai.useRAG) {
         searchResults = await this.searchKnowledgeBase(userMessage);
         if (searchResults.length > 0) {
-          context = searchResults.map((result, index) => 
+          const kbContext = searchResults.map((result, index) => 
             `Document ${index + 1} (${result.document.name}):\n${result.chunk.content}`
           ).join('\n\n');
+          context += (context ? '\n\n' : '') + kbContext;
+          hasRelevantData = true;
         }
       }
 
-      // Build system prompt
-      const systemPrompt = this.buildSystemPrompt(context, conversation);
+      // GUARD RAIL 2: Use web scraping data if enabled (can be used alongside KB)
+      if (this.bot.settings.webScraping?.enabled) {
+        const webScrapingResults = await this.searchWebScrapingData(userMessage);
+        if (webScrapingResults.length > 0) {
+          const webContext = webScrapingResults.map((result, index) => 
+            `Web Content ${index + 1} (${result.source}):\n${result.content}`
+          ).join('\n\n');
+          context += (context ? '\n\n' : '') + webContext;
+          hasRelevantData = true;
+        }
+      }
+
+      // GUARD RAIL 3: If no relevant data found, use predefined fallback responses
+      if (!hasRelevantData) {
+        return this.getFallbackResponse(userMessage);
+      }
+
+      // GUARD RAIL 4: Build system prompt with strict instructions
+      const systemPrompt = this.buildGuardedSystemPrompt(context, conversation);
 
       const completion = await this.openaiClient.chat.completions.create({
         model: this.bot.settings.ai.model,
@@ -525,11 +563,18 @@ class BotRuntime {
         max_tokens: this.bot.settings.ai.maxTokens
       });
 
-      return completion.choices[0].message.content;
+      const response = completion.choices[0].message.content;
+
+      // GUARD RAIL 5: Validate response doesn't contain internet references
+      if (this.containsInternetReferences(response)) {
+        return this.getFallbackResponse(userMessage);
+      }
+
+      return response;
 
     } catch (error) {
       console.error('AI response error:', error);
-      return 'I apologize, but I\'m having trouble processing your request right now.';
+      return this.getFallbackResponse(userMessage);
     }
   }
 
@@ -555,6 +600,43 @@ Instructions:
 3. If using knowledge base context, base your answer on that information
 4. Keep responses concise and helpful
 5. Guide the conversation toward the bot's objectives (${bot.type})
+
+Response language: ${personality.language || 'en'}`;
+
+    return prompt;
+  }
+
+  buildGuardedSystemPrompt(context, conversation) {
+    const bot = this.bot;
+    const personality = bot.settings.personality;
+    const variables = conversation.flowState.variables;
+
+    let prompt = `You are ${bot.settings.appearance.name || bot.name}, a ${personality.tone} and ${personality.style} AI assistant.
+
+CRITICAL RESTRICTIONS - YOU MUST FOLLOW THESE RULES:
+1. ONLY use the provided context data (documents and web content) to answer questions
+2. NEVER access the internet or external sources in real-time
+3. NEVER make up information not in the provided context
+4. If the answer is not in the provided context, say "I don't have that information in my knowledge base or web content"
+5. NEVER provide URLs, links, or suggest searching the internet
+6. NEVER give general knowledge answers unless specifically in the context
+
+Your role: ${bot.type.replace('_', ' ')} bot.
+Personality: Be ${personality.tone} and ${personality.style} in your responses.
+
+Current conversation context:
+- User variables collected: ${JSON.stringify(variables, null, 2)}
+- Current flow position: ${conversation.flowState.currentNode}
+
+${context ? `AUTHORIZED KNOWLEDGE BASE AND WEB CONTENT:\n${context}\n` : ''}
+
+Instructions:
+1. Stay in character as defined by your personality settings
+2. ONLY use the provided context data to answer questions
+3. If the context doesn't contain the answer, politely say you don't have that information
+4. Keep responses concise and helpful
+5. Guide the conversation toward the bot's objectives (${bot.type})
+6. NEVER suggest external sources or internet searches
 
 Response language: ${personality.language || 'en'}`;
 
@@ -607,6 +689,103 @@ Response language: ${personality.language || 'en'}`;
       console.error('Knowledge base search error:', error);
       return [];
     }
+  }
+
+  async searchWebScrapingData(query) {
+    try {
+      const ScrapedContent = require('../models/ScrapedContent');
+      
+      const scrapedContent = await ScrapedContent.find(
+        { 
+          $text: { $search: query },
+          status: 'processed'
+        },
+        { score: { $meta: 'textScore' } }
+      )
+      .sort({ score: { $meta: 'textScore' } })
+      .limit(5);
+
+      const results = [];
+      for (const content of scrapedContent) {
+        // Check if content matches the query
+        const contentText = content.content.toLowerCase();
+        const searchTerms = query.toLowerCase().split(' ').filter(term => term.length > 2);
+        
+        if (contentText.includes(query.toLowerCase()) || 
+            searchTerms.some(term => contentText.includes(term))) {
+          results.push({
+            content: content.content.substring(0, 1000), // Limit content length
+            source: content.url,
+            title: content.title || content.url,
+            score: Math.random() * 0.3 + 0.7
+          });
+        }
+      }
+
+      return results;
+    } catch (error) {
+      console.error('Web scraping search error:', error);
+      return [];
+    }
+  }
+
+  getFallbackResponse(userMessage) {
+    const fallbackResponses = [
+      "I don't have that information in my knowledge base. Could you please rephrase your question or ask about something else?",
+      "I'm sorry, but I don't have access to that information. Is there something else I can help you with?",
+      "That's not something I have information about. Let me know if you have any other questions!",
+      "I don't have that information available. Could you try asking about something else?",
+      "I'm not able to provide information on that topic. Is there anything else I can assist you with?"
+    ];
+
+    // Simple keyword matching for common questions
+    const message = userMessage.toLowerCase();
+    
+    if (message.includes('hello') || message.includes('hi') || message.includes('hey')) {
+      return "Hello! How can I help you today?";
+    }
+    
+    if (message.includes('thank') || message.includes('thanks')) {
+      return "You're welcome! Is there anything else I can help you with?";
+    }
+    
+    if (message.includes('bye') || message.includes('goodbye') || message.includes('see you')) {
+      return "Goodbye! Have a great day!";
+    }
+    
+    if (message.includes('help') || message.includes('what can you do')) {
+      return "I can help answer questions based on the information in my knowledge base. What would you like to know?";
+    }
+
+    // Return random fallback response
+    return fallbackResponses[Math.floor(Math.random() * fallbackResponses.length)];
+  }
+
+  containsInternetReferences(response) {
+    const internetKeywords = [
+      'search the internet',
+      'google it',
+      'look it up online',
+      'check the web',
+      'browse the internet',
+      'visit this website',
+      'go to this link',
+      'http://',
+      'https://',
+      'www.',
+      '.com',
+      '.org',
+      '.net',
+      'as of my last update',
+      'my training data',
+      'i was trained',
+      'in my training',
+      'according to my knowledge',
+      'based on my training'
+    ];
+
+    const responseLower = response.toLowerCase();
+    return internetKeywords.some(keyword => responseLower.includes(keyword));
   }
 
   // Helper methods
@@ -706,6 +885,42 @@ Response language: ${personality.language || 'en'}`;
   isValidPhone(phone) {
     const phoneRegex = /^[\+]?[1-9][\d]{0,15}$/;
     return phoneRegex.test(phone.replace(/[\s\-\(\)]/g, ''));
+  }
+
+  isValidDate(dateString) {
+    // Support multiple date formats: YYYY-MM-DD, MM/DD/YYYY, DD/MM/YYYY
+    const dateFormats = [
+      /^\d{4}-\d{2}-\d{2}$/, // YYYY-MM-DD
+      /^\d{2}\/\d{2}\/\d{4}$/, // MM/DD/YYYY or DD/MM/YYYY
+      /^\d{1,2}\/\d{1,2}\/\d{4}$/, // M/D/YYYY or D/M/YYYY
+      /^\d{4}\/\d{2}\/\d{2}$/, // YYYY/MM/DD
+    ];
+
+    const isFormatValid = dateFormats.some(format => format.test(dateString));
+    if (!isFormatValid) return false;
+
+    // Try to parse the date
+    let date;
+    if (dateString.includes('-')) {
+      date = new Date(dateString);
+    } else if (dateString.includes('/')) {
+      // Handle different slash formats
+      date = new Date(dateString);
+    }
+
+    return date instanceof Date && !isNaN(date.getTime()) && date.getFullYear() > 1900 && date.getFullYear() < 2100;
+  }
+
+  isValidTime(timeString) {
+    // Support multiple time formats: HH:MM, HH:MM:SS, 12-hour format with AM/PM
+    const timeFormats = [
+      /^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/, // HH:MM (24-hour)
+      /^([0-1]?[0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9]$/, // HH:MM:SS (24-hour)
+      /^(1[0-2]|0?[1-9]):[0-5][0-9]\s?(AM|PM)$/i, // HH:MM AM/PM
+      /^(1[0-2]|0?[1-9]):[0-5][0-9]:[0-5][0-9]\s?(AM|PM)$/i, // HH:MM:SS AM/PM
+    ];
+
+    return timeFormats.some(format => format.test(timeString.trim()));
   }
 
   extractLeadData(variables) {
@@ -1051,6 +1266,14 @@ Response language: ${personality.language || 'en'}`;
           isValid = !isNaN(rating) && rating >= 1 && rating <= ratingScale;
           errorMessage = `Please provide a rating between 1 and ${ratingScale}.`;
           break;
+        case 'date_input':
+          isValid = this.isValidDate(userMessage);
+          errorMessage = 'Please provide a valid date (YYYY-MM-DD, MM/DD/YYYY, or DD/MM/YYYY).';
+          break;
+        case 'time_input':
+          isValid = this.isValidTime(userMessage);
+          errorMessage = 'Please provide a valid time (HH:MM or HH:MM:SS, 12-hour or 24-hour format).';
+          break;
       }
 
       if (!isValid) {
@@ -1066,7 +1289,9 @@ Response language: ${personality.language || 'en'}`;
       const variableName = inputType === 'email_input' ? 'email' : 
                           inputType === 'phone_input' ? 'phone' :
                           inputType === 'number_input' ? 'number' :
-                          inputType === 'rating' ? 'rating' : `${node.id}_value`;
+                          inputType === 'rating' ? 'rating' :
+                          inputType === 'date_input' ? 'date' :
+                          inputType === 'time_input' ? 'time' : `${node.id}_value`;
       
       conversation.flowState.variables[variableName] = userMessage;
 
@@ -1098,6 +1323,12 @@ Response language: ${personality.language || 'en'}`;
         case 'rating':
           const scale = node.data.ratingScale || 5;
           content = `Please rate from 1 to ${scale}:`;
+          break;
+        case 'date_input':
+          content = 'Please provide a date (e.g., 2024-03-15, 03/15/2024, or 15/03/2024):';
+          break;
+        case 'time_input':
+          content = 'Please provide a time (e.g., 14:30, 2:30 PM, or 14:30:00):';
           break;
         default:
           content = 'Please provide your input:';
@@ -1187,6 +1418,696 @@ Response language: ${personality.language || 'en'}`;
         return true;
       default:
         return true;
+    }
+  }
+
+  // AI & Intelligence Node Processors
+
+  async processIntentRecognitionNode(node, conversation, userMessage) {
+    try {
+      if (!this.openaiClient || !userMessage) {
+        const nextNode = this.findNextNode(node, conversation);
+        return {
+          content: node.data.content || 'Intent recognition not available.',
+          type: 'text',
+          nodeId: node.id,
+          flowState: {
+            currentNode: nextNode?.id || null
+          }
+        };
+      }
+
+      // Use predefined intents or detect dynamically
+      const predefinedIntents = node.data.intents || [
+        'greeting', 'question', 'request', 'complaint', 'compliment', 
+        'booking', 'support', 'information', 'goodbye'
+      ];
+
+      const intentPrompt = `Analyze the following message and identify the user's intent. 
+      Choose from these possible intents: ${predefinedIntents.join(', ')}.
+      If none match exactly, provide the most similar one.
+      
+      User message: "${userMessage}"
+      
+      Respond with only the intent name and confidence score (0-1) in JSON format:
+      {"intent": "intent_name", "confidence": 0.95}`;
+
+      const completion = await this.openaiClient.chat.completions.create({
+        model: node.data.aiModel || 'gpt-3.5-turbo',
+        messages: [
+          { role: 'system', content: 'You are an intent classification system.' },
+          { role: 'user', content: intentPrompt }
+        ],
+        temperature: 0.1,
+        max_tokens: 100
+      });
+
+      let intentResult = { intent: 'unknown', confidence: 0.0 };
+      try {
+        intentResult = JSON.parse(completion.choices[0].message.content);
+      } catch (parseError) {
+        console.error('Intent parsing error:', parseError);
+      }
+
+      // Store intent in conversation variables
+      conversation.flowState.variables.detected_intent = intentResult.intent;
+      conversation.flowState.variables.intent_confidence = intentResult.confidence;
+
+      const nextNode = this.findNextNode(node, conversation);
+      
+      return {
+        content: node.data.content || `Intent detected: ${intentResult.intent} (${(intentResult.confidence * 100).toFixed(0)}% confidence)`,
+        type: 'text',
+        nodeId: node.id,
+        flowState: {
+          currentNode: nextNode?.id || null,
+          variables: conversation.flowState.variables
+        },
+        metadata: {
+          intentResult,
+          availableIntents: predefinedIntents
+        }
+      };
+
+    } catch (error) {
+      console.error('Intent recognition error:', error);
+      const nextNode = this.findNextNode(node, conversation);
+      
+      return {
+        content: 'Unable to analyze intent at the moment.',
+        type: 'text',
+        nodeId: node.id,
+        flowState: {
+          currentNode: nextNode?.id || null
+        }
+      };
+    }
+  }
+
+  async processEntityExtractionNode(node, conversation, userMessage) {
+    try {
+      if (!this.openaiClient || !userMessage) {
+        const nextNode = this.findNextNode(node, conversation);
+        return {
+          content: node.data.content || 'Entity extraction not available.',
+          type: 'text',
+          nodeId: node.id,
+          flowState: {
+            currentNode: nextNode?.id || null
+          }
+        };
+      }
+
+      // Define entity types to extract
+      const entityTypes = node.data.entityTypes || [
+        'PERSON', 'EMAIL', 'PHONE', 'DATE', 'TIME', 'LOCATION', 'ORGANIZATION', 
+        'MONEY', 'NUMBER', 'URL'
+      ];
+
+      const entityPrompt = `Extract the following types of entities from the user message: ${entityTypes.join(', ')}.
+      
+      User message: "${userMessage}"
+      
+      Return the results in JSON format with entity type, value, and position:
+      {"entities": [{"type": "EMAIL", "value": "john@example.com", "start": 10, "end": 25}]}
+      If no entities are found, return {"entities": []}.`;
+
+      const completion = await this.openaiClient.chat.completions.create({
+        model: node.data.aiModel || 'gpt-3.5-turbo',
+        messages: [
+          { role: 'system', content: 'You are an entity extraction system. Extract structured information from text.' },
+          { role: 'user', content: entityPrompt }
+        ],
+        temperature: 0.1,
+        max_tokens: 500
+      });
+
+      let extractedEntities = { entities: [] };
+      try {
+        extractedEntities = JSON.parse(completion.choices[0].message.content);
+      } catch (parseError) {
+        console.error('Entity extraction parsing error:', parseError);
+      }
+
+      // Store extracted entities in conversation variables
+      extractedEntities.entities.forEach(entity => {
+        const variableName = `entity_${entity.type.toLowerCase()}`;
+        conversation.flowState.variables[variableName] = entity.value;
+      });
+
+      conversation.flowState.variables.extracted_entities = extractedEntities.entities;
+
+      const nextNode = this.findNextNode(node, conversation);
+      
+      return {
+        content: node.data.content || `Extracted ${extractedEntities.entities.length} entities from your message.`,
+        type: 'text',
+        nodeId: node.id,
+        flowState: {
+          currentNode: nextNode?.id || null,
+          variables: conversation.flowState.variables
+        },
+        metadata: {
+          extractedEntities: extractedEntities.entities,
+          entityTypes
+        }
+      };
+
+    } catch (error) {
+      console.error('Entity extraction error:', error);
+      const nextNode = this.findNextNode(node, conversation);
+      
+      return {
+        content: 'Unable to extract entities at the moment.',
+        type: 'text',
+        nodeId: node.id,
+        flowState: {
+          currentNode: nextNode?.id || null
+        }
+      };
+    }
+  }
+
+  async processSentimentAnalysisNode(node, conversation, userMessage) {
+    try {
+      if (!this.openaiClient || !userMessage) {
+        const nextNode = this.findNextNode(node, conversation);
+        return {
+          content: node.data.content || 'Sentiment analysis not available.',
+          type: 'text',
+          nodeId: node.id,
+          flowState: {
+            currentNode: nextNode?.id || null
+          }
+        };
+      }
+
+      const sentimentPrompt = `Analyze the sentiment of this message and provide a detailed analysis.
+      
+      User message: "${userMessage}"
+      
+      Return the results in JSON format:
+      {
+        "sentiment": "positive|negative|neutral",
+        "confidence": 0.95,
+        "emotions": ["joy", "anger", "fear", "sadness", "surprise"],
+        "intensity": 0.8,
+        "reasoning": "Brief explanation of the sentiment analysis"
+      }`;
+
+      const completion = await this.openaiClient.chat.completions.create({
+        model: node.data.aiModel || 'gpt-3.5-turbo',
+        messages: [
+          { role: 'system', content: 'You are a sentiment analysis expert. Analyze the emotional tone and sentiment of text.' },
+          { role: 'user', content: sentimentPrompt }
+        ],
+        temperature: 0.1,
+        max_tokens: 300
+      });
+
+      let sentimentResult = { 
+        sentiment: 'neutral', 
+        confidence: 0.0, 
+        emotions: [], 
+        intensity: 0.0, 
+        reasoning: 'Analysis failed' 
+      };
+      
+      try {
+        sentimentResult = JSON.parse(completion.choices[0].message.content);
+      } catch (parseError) {
+        console.error('Sentiment analysis parsing error:', parseError);
+      }
+
+      // Store sentiment in conversation variables
+      conversation.flowState.variables.sentiment = sentimentResult.sentiment;
+      conversation.flowState.variables.sentiment_confidence = sentimentResult.confidence;
+      conversation.flowState.variables.emotions = sentimentResult.emotions;
+      conversation.flowState.variables.sentiment_intensity = sentimentResult.intensity;
+
+      const nextNode = this.findNextNode(node, conversation);
+      
+      return {
+        content: node.data.content || `Sentiment: ${sentimentResult.sentiment} (${(sentimentResult.confidence * 100).toFixed(0)}% confidence)`,
+        type: 'text',
+        nodeId: node.id,
+        flowState: {
+          currentNode: nextNode?.id || null,
+          variables: conversation.flowState.variables
+        },
+        metadata: {
+          sentimentResult
+        }
+      };
+
+    } catch (error) {
+      console.error('Sentiment analysis error:', error);
+      const nextNode = this.findNextNode(node, conversation);
+      
+      return {
+        content: 'Unable to analyze sentiment at the moment.',
+        type: 'text',
+        nodeId: node.id,
+        flowState: {
+          currentNode: nextNode?.id || null
+        }
+      };
+    }
+  }
+
+  async processLanguageDetectionNode(node, conversation, userMessage) {
+    try {
+      if (!this.openaiClient || !userMessage) {
+        const nextNode = this.findNextNode(node, conversation);
+        return {
+          content: node.data.content || 'Language detection not available.',
+          type: 'text',
+          nodeId: node.id,
+          flowState: {
+            currentNode: nextNode?.id || null
+          }
+        };
+      }
+
+      const languagePrompt = `Detect the language of the following text and provide confidence score.
+      
+      Text: "${userMessage}"
+      
+      Return the result in JSON format:
+      {
+        "language": "en",
+        "language_name": "English",
+        "confidence": 0.95,
+        "alternatives": [{"language": "es", "language_name": "Spanish", "confidence": 0.05}]
+      }`;
+
+      const completion = await this.openaiClient.chat.completions.create({
+        model: node.data.aiModel || 'gpt-3.5-turbo',
+        messages: [
+          { role: 'system', content: 'You are a language detection expert. Identify the language of text with high accuracy.' },
+          { role: 'user', content: languagePrompt }
+        ],
+        temperature: 0.1,
+        max_tokens: 200
+      });
+
+      let languageResult = { 
+        language: 'en', 
+        language_name: 'English', 
+        confidence: 0.0, 
+        alternatives: [] 
+      };
+      
+      try {
+        languageResult = JSON.parse(completion.choices[0].message.content);
+      } catch (parseError) {
+        console.error('Language detection parsing error:', parseError);
+      }
+
+      // Store language in conversation variables
+      conversation.flowState.variables.detected_language = languageResult.language;
+      conversation.flowState.variables.language_name = languageResult.language_name;
+      conversation.flowState.variables.language_confidence = languageResult.confidence;
+
+      const nextNode = this.findNextNode(node, conversation);
+      
+      return {
+        content: node.data.content || `Language detected: ${languageResult.language_name} (${(languageResult.confidence * 100).toFixed(0)}% confidence)`,
+        type: 'text',
+        nodeId: node.id,
+        flowState: {
+          currentNode: nextNode?.id || null,
+          variables: conversation.flowState.variables
+        },
+        metadata: {
+          languageResult
+        }
+      };
+
+    } catch (error) {
+      console.error('Language detection error:', error);
+      const nextNode = this.findNextNode(node, conversation);
+      
+      return {
+        content: 'Unable to detect language at the moment.',
+        type: 'text',
+        nodeId: node.id,
+        flowState: {
+          currentNode: nextNode?.id || null
+        }
+      };
+    }
+  }
+
+  async processTranslationNode(node, conversation, userMessage) {
+    try {
+      if (!this.openaiClient || !userMessage) {
+        const nextNode = this.findNextNode(node, conversation);
+        return {
+          content: node.data.content || 'Translation not available.',
+          type: 'text',
+          nodeId: node.id,
+          flowState: {
+            currentNode: nextNode?.id || null
+          }
+        };
+      }
+
+      // Get source and target languages
+      const sourceLanguage = node.data.sourceLanguage || conversation.flowState.variables.detected_language || 'auto';
+      const targetLanguage = node.data.targetLanguage || 'en';
+      const textToTranslate = node.data.translateUserMessage ? userMessage : (node.data.textToTranslate || userMessage);
+
+      const translationPrompt = `Translate the following text from ${sourceLanguage} to ${targetLanguage}.
+      ${sourceLanguage === 'auto' ? 'Auto-detect the source language.' : ''}
+      
+      Text to translate: "${textToTranslate}"
+      
+      Return the result in JSON format:
+      {
+        "translated_text": "Hello, how are you?",
+        "source_language": "es",
+        "target_language": "en",
+        "confidence": 0.95
+      }`;
+
+      const completion = await this.openaiClient.chat.completions.create({
+        model: node.data.aiModel || 'gpt-3.5-turbo',
+        messages: [
+          { role: 'system', content: 'You are a professional translator. Provide accurate translations while preserving meaning and context.' },
+          { role: 'user', content: translationPrompt }
+        ],
+        temperature: 0.1,
+        max_tokens: 1000
+      });
+
+      let translationResult = { 
+        translated_text: textToTranslate, 
+        source_language: sourceLanguage, 
+        target_language: targetLanguage, 
+        confidence: 0.0 
+      };
+      
+      try {
+        translationResult = JSON.parse(completion.choices[0].message.content);
+      } catch (parseError) {
+        console.error('Translation parsing error:', parseError);
+      }
+
+      // Store translation in conversation variables
+      conversation.flowState.variables.translated_text = translationResult.translated_text;
+      conversation.flowState.variables.translation_source_language = translationResult.source_language;
+      conversation.flowState.variables.translation_target_language = translationResult.target_language;
+      conversation.flowState.variables.translation_confidence = translationResult.confidence;
+
+      const nextNode = this.findNextNode(node, conversation);
+      
+      return {
+        content: node.data.showTranslation ? 
+          `Translation: ${translationResult.translated_text}` : 
+          (node.data.content || translationResult.translated_text),
+        type: 'text',
+        nodeId: node.id,
+        flowState: {
+          currentNode: nextNode?.id || null,
+          variables: conversation.flowState.variables
+        },
+        metadata: {
+          translationResult,
+          originalText: textToTranslate
+        }
+      };
+
+    } catch (error) {
+      console.error('Translation error:', error);
+      const nextNode = this.findNextNode(node, conversation);
+      
+      return {
+        content: 'Unable to translate at the moment.',
+        type: 'text',
+        nodeId: node.id,
+        flowState: {
+          currentNode: nextNode?.id || null
+        }
+      };
+    }
+  }
+
+  // Forms & Data Collection Node Processors
+
+  async processSurveyNode(node, conversation, userMessage) {
+    try {
+      const surveyQuestions = node.data.surveyQuestions || [];
+      const currentQuestionIndex = conversation.flowState.variables[`${node.id}_question_index`] || 0;
+      
+      if (currentQuestionIndex >= surveyQuestions.length) {
+        // Survey completed
+        const nextNode = this.findNextNode(node, conversation);
+        conversation.flowState.variables[`${node.id}_completed`] = true;
+        
+        return {
+          content: node.data.completionMessage || 'Thank you for completing the survey!',
+          type: 'text',
+          nodeId: node.id,
+          flowState: {
+            currentNode: nextNode?.id || null,
+            variables: conversation.flowState.variables
+          },
+          metadata: {
+            surveyCompleted: true,
+            totalQuestions: surveyQuestions.length
+          }
+        };
+      }
+
+      const currentQuestion = surveyQuestions[currentQuestionIndex];
+      
+      // If user provided an answer, store it and move to next question
+      if (conversation.flowState.currentNode === node.id && userMessage) {
+        const answerKey = `${node.id}_answer_${currentQuestionIndex}`;
+        conversation.flowState.variables[answerKey] = userMessage;
+        conversation.flowState.variables[`${node.id}_question_index`] = currentQuestionIndex + 1;
+        
+        // Recursively continue to next question
+        return await this.processSurveyNode(node, conversation, null);
+      }
+
+      // Show current question
+      const questionContent = `${currentQuestion.question}${currentQuestion.required ? ' *' : ''}`;
+      const progress = `(${currentQuestionIndex + 1}/${surveyQuestions.length})`;
+      
+      return {
+        content: `${questionContent}\n\n${progress}`,
+        type: currentQuestion.type || 'text',
+        options: currentQuestion.options,
+        nodeId: node.id,
+        flowState: {
+          currentNode: node.id,
+          variables: conversation.flowState.variables
+        },
+        metadata: {
+          currentQuestion: currentQuestionIndex,
+          totalQuestions: surveyQuestions.length,
+          questionType: currentQuestion.type,
+          required: currentQuestion.required
+        }
+      };
+
+    } catch (error) {
+      console.error('Survey processing error:', error);
+      const nextNode = this.findNextNode(node, conversation);
+      
+      return {
+        content: 'Unable to process survey at the moment.',
+        type: 'text',
+        nodeId: node.id,
+        flowState: {
+          currentNode: nextNode?.id || null
+        }
+      };
+    }
+  }
+
+  async processLocationNode(node, conversation, userMessage) {
+    try {
+      if (conversation.flowState.currentNode === node.id && userMessage) {
+        // Try to parse location from user input
+        let locationData = null;
+        
+        // Check if it's coordinates (lat, lng)
+        const coordPattern = /^(-?\d+\.?\d*),\s*(-?\d+\.?\d*)$/;
+        const coordMatch = userMessage.match(coordPattern);
+        
+        if (coordMatch) {
+          locationData = {
+            type: 'coordinates',
+            latitude: parseFloat(coordMatch[1]),
+            longitude: parseFloat(coordMatch[2]),
+            raw: userMessage
+          };
+        } else {
+          // Treat as address/place name
+          locationData = {
+            type: 'address',
+            address: userMessage.trim(),
+            raw: userMessage
+          };
+        }
+
+        // Store location data
+        conversation.flowState.variables.location = locationData;
+        conversation.flowState.variables.location_raw = userMessage;
+        
+        const nextNode = this.findNextNode(node, conversation);
+        if (nextNode) {
+          return await this.executeFlow({
+            ...conversation,
+            flowState: {
+              ...conversation.flowState,
+              currentNode: nextNode.id
+            }
+          }, null);
+        }
+      }
+
+      // Show location input prompt
+      let content = node.data.content || 'Please share your location:';
+      const inputMethod = node.data.inputMethod || 'text'; // text, coordinates, map
+      
+      if (!node.data.content) {
+        switch (inputMethod) {
+          case 'coordinates':
+            content = 'Please provide your coordinates (latitude, longitude):';
+            break;
+          case 'address':
+            content = 'Please provide your address or location:';
+            break;
+          default:
+            content = 'Please share your location (address or coordinates):';
+        }
+      }
+
+      content = this.processVariables(content, conversation.flowState.variables);
+
+      return {
+        content,
+        type: 'location',
+        nodeId: node.id,
+        flowState: { currentNode: node.id },
+        metadata: {
+          inputMethod,
+          acceptsCoordinates: inputMethod === 'coordinates' || inputMethod === 'text',
+          acceptsAddress: inputMethod === 'address' || inputMethod === 'text'
+        }
+      };
+
+    } catch (error) {
+      console.error('Location processing error:', error);
+      const nextNode = this.findNextNode(node, conversation);
+      
+      return {
+        content: 'Unable to process location at the moment.',
+        type: 'text',
+        nodeId: node.id,
+        flowState: {
+          currentNode: nextNode?.id || null
+        }
+      };
+    }
+  }
+
+  async processQRCodeNode(node, conversation, userMessage) {
+    try {
+      if (conversation.flowState.currentNode === node.id && userMessage) {
+        // Process QR code input - could be scanned data or manual input
+        const qrData = userMessage.trim();
+        
+        // Validate QR code data if validation pattern is provided
+        let isValid = true;
+        if (node.data.validation && node.data.validation.pattern) {
+          const validationRegex = new RegExp(node.data.validation.pattern);
+          isValid = validationRegex.test(qrData);
+        }
+
+        if (!isValid) {
+          return {
+            content: node.data.validation?.message || 'Invalid QR code data. Please try again.',
+            type: 'text',
+            nodeId: node.id,
+            flowState: { currentNode: node.id }
+          };
+        }
+
+        // Store QR code data
+        conversation.flowState.variables.qr_code_data = qrData;
+        conversation.flowState.variables[`${node.id}_qr_data`] = qrData;
+        
+        // Try to parse if it's a URL or JSON
+        let parsedData = { raw: qrData };
+        try {
+          // Try parsing as JSON
+          parsedData.json = JSON.parse(qrData);
+        } catch {
+          // Try parsing as URL
+          try {
+            const url = new URL(qrData);
+            parsedData.url = {
+              href: url.href,
+              protocol: url.protocol,
+              hostname: url.hostname,
+              pathname: url.pathname,
+              search: url.search,
+              params: Object.fromEntries(url.searchParams)
+            };
+          } catch {
+            // Plain text data
+            parsedData.text = qrData;
+          }
+        }
+
+        conversation.flowState.variables.qr_parsed_data = parsedData;
+
+        const nextNode = this.findNextNode(node, conversation);
+        if (nextNode) {
+          return await this.executeFlow({
+            ...conversation,
+            flowState: {
+              ...conversation.flowState,
+              currentNode: nextNode.id
+            }
+          }, null);
+        }
+      }
+
+      // Show QR code input prompt
+      let content = node.data.content || 'Please scan the QR code or enter the data manually:';
+      content = this.processVariables(content, conversation.flowState.variables);
+
+      return {
+        content,
+        type: 'qr_code',
+        nodeId: node.id,
+        flowState: { currentNode: node.id },
+        metadata: {
+          expectsQRScan: true,
+          allowsManualInput: node.data.allowManualInput !== false,
+          validationPattern: node.data.validation?.pattern,
+          qrCodeType: node.data.qrCodeType // url, json, text, custom
+        }
+      };
+
+    } catch (error) {
+      console.error('QR Code processing error:', error);
+      const nextNode = this.findNextNode(node, conversation);
+      
+      return {
+        content: 'Unable to process QR code at the moment.',
+        type: 'text',
+        nodeId: node.id,
+        flowState: {
+          currentNode: nextNode?.id || null
+        }
+      };
     }
   }
 }

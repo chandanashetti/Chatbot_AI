@@ -3,6 +3,8 @@ const router = express.Router();
 const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
 const User = require('../models/User');
+const { authenticate } = require('../middleware/auth');
+const { populateUserPermissions, getRolePermissions } = require('../middleware/rbac');
 
 // Helper function to generate JWT token
 const generateToken = (user) => {
@@ -231,6 +233,9 @@ router.post('/login', async (req, res) => {
     // Populate user data for response
     await user.populate('profile.manager', 'profile.firstName profile.lastName email');
     
+    // Get effective permissions (role + user-specific)
+    const effectivePermissions = user.getEffectivePermissions();
+    
     console.log(`✅ User logged in successfully: ${user.email}`);
     
     res.json({
@@ -245,7 +250,7 @@ router.post('/login', async (req, res) => {
           role: user.role,
           status: user.status,
           profile: user.profile,
-          permissions: user.permissions,
+          permissions: effectivePermissions,
           preferences: user.preferences,
           lastLogin: user.lastLogin
         }
@@ -554,7 +559,7 @@ router.post('/change-password', async (req, res) => {
 });
 
 // GET /api/auth/me - Get current user profile
-router.get('/me', async (req, res) => {
+router.get('/me', authenticate, populateUserPermissions, async (req, res) => {
   try {
     const userId = req.user?.id;
     

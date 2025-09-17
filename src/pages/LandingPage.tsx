@@ -108,7 +108,7 @@ const LandingPage = () => {
                 <Bot className="w-6 h-6 text-white" />
               </div>
               <span className="text-xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
-                SmatBot AI
+                Wellbo AI
               </span>
             </div>
             
@@ -550,7 +550,7 @@ const LandingPage = () => {
                 <Bot className="w-5 h-5 text-white" />
               </div>
               <span className="text-lg font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
-                SmatBot AI
+                Wellbo AI
               </span>
             </div>
             
@@ -578,7 +578,7 @@ const LandingPage = () => {
           
           <div className="border-t border-slate-200 dark:border-slate-700 mt-8 pt-8 text-center">
             <p className="text-slate-500 dark:text-slate-400 text-sm">
-              © 2024 SmatBot AI. All rights reserved. Transforming customer experiences with intelligent AI.
+              © 2024 Wellbo AI. All rights reserved. Transforming customer experiences with intelligent AI.
             </p>
           </div>
         </div>

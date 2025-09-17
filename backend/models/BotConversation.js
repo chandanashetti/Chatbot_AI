@@ -87,6 +87,15 @@ const botConversationSchema = new mongoose.Schema({
   botId: { type: mongoose.Schema.Types.ObjectId, ref: 'Bot', required: true },
   userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }, // Optional for registered users
   
+  // Channel/Platform information
+  platform: {
+    type: String,
+    enum: ['facebook', 'instagram', 'whatsapp', 'telegram', 'discord', 'line', 'web', 'other'],
+    required: true
+  },
+  channelAccountId: { type: mongoose.Schema.Types.ObjectId, ref: 'ChannelAccount' }, // Reference to specific account
+  externalUserId: String, // Platform-specific user ID (e.g., Facebook PSID, Instagram User ID)
+  
   // Session and user information
   sessionId: { type: String, required: true },
   user: conversationUserSchema,
@@ -220,6 +229,10 @@ botConversationSchema.index({ lastMessageAt: -1 });
 botConversationSchema.index({ 'user.ipAddress': 1 });
 botConversationSchema.index({ 'leadData.email': 1 });
 botConversationSchema.index({ 'flowState.currentNode': 1 });
+// Multi-account indexes
+botConversationSchema.index({ platform: 1, channelAccountId: 1 });
+botConversationSchema.index({ channelAccountId: 1, createdAt: -1 });
+botConversationSchema.index({ externalUserId: 1, platform: 1 });
 
 // Pre-save middleware
 botConversationSchema.pre('save', function(next) {
@@ -347,6 +360,36 @@ botConversationSchema.statics.findActiveByBot = function(botId) {
 
 botConversationSchema.statics.findBySessionId = function(sessionId) {
   return this.findOne({ sessionId, status: { $ne: 'archived' } });
+};
+
+botConversationSchema.statics.findByChannelAccount = function(channelAccountId, options = {}) {
+  const query = { channelAccountId };
+  
+  if (options.status) {
+    query.status = options.status;
+  }
+  
+  if (options.startDate || options.endDate) {
+    query.createdAt = {};
+    if (options.startDate) query.createdAt.$gte = new Date(options.startDate);
+    if (options.endDate) query.createdAt.$lte = new Date(options.endDate);
+  }
+  
+  return this.find(query)
+    .populate('channelAccountId', 'name platform details')
+    .sort({ lastMessageAt: -1 });
+};
+
+botConversationSchema.statics.findByPlatformAndAccount = function(platform, accountIds = null) {
+  const query = { platform };
+  
+  if (accountIds && accountIds.length > 0) {
+    query.channelAccountId = { $in: accountIds };
+  }
+  
+  return this.find(query)
+    .populate('channelAccountId', 'name platform details')
+    .sort({ lastMessageAt: -1 });
 };
 
 botConversationSchema.statics.getAnalytics = function(botId, startDate, endDate) {

@@ -86,6 +86,15 @@ export interface BotNode {
     aiModel?: string
     aiPrompt?: string
     temperature?: number
+    
+    // AI & Intelligence node properties
+    intents?: string[] // For intent_recognition
+    entityTypes?: string[] // For entity_extraction
+    sourceLanguage?: string // For translation
+    targetLanguage?: string // For translation
+    translateUserMessage?: boolean // For translation
+    textToTranslate?: string // For translation
+    showTranslation?: boolean // For translation
     // Form fields
     fields?: Array<{
       name: string
@@ -145,9 +154,24 @@ export interface BotNode {
     // Survey
     surveyQuestions?: Array<{
       question: string
-      type: 'text' | 'choice' | 'rating' | 'date'
+      type: 'text' | 'multiple_choice' | 'rating' | 'yes_no'
       options?: string[]
+      required?: boolean
     }>
+    completionMessage?: string // Survey completion message
+    
+    // Location input
+    inputMethod?: 'text' | 'coordinates' | 'address' | 'map'
+    
+    // QR Code
+    qrCodeType?: 'text' | 'url' | 'json' | 'custom'
+    allowManualInput?: boolean
+    
+    // Date/Time input
+    dateFormat?: string
+    timeFormat?: string
+    minDate?: string
+    maxDate?: string
     // Calendar
     calendarId?: string
     timeSlots?: string[]
