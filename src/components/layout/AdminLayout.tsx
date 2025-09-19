@@ -22,7 +22,8 @@ import {
   Sparkles,
   Crown,
   Ticket,
-  Shield
+  Shield,
+  Mail
 } from 'lucide-react'
 import { useTheme } from '../providers/ThemeProvider'
 
@@ -83,6 +84,12 @@ const NAVIGATION_CONFIG = [
     permission: { module: 'analytics', action: 'view' }
   },
   {
+    name: 'Email Campaigns',
+    href: '/admin/email-campaigns',
+    icon: Mail,
+    permission: { module: 'marketing', action: 'view' }
+  },
+  {
     name: 'Knowledge Base',
     href: '/admin/knowledge-base',
     icon: FileText,
@@ -113,12 +120,27 @@ const AdminLayout: React.FC = () => {
 
   // Filter navigation based on permissions
   const navigation = useMemo(() => {
+    console.log('🔍 AdminLayout - User permissions:', userPermissions)
+    console.log('🔍 AdminLayout - User role:', user?.role)
+
     return NAVIGATION_CONFIG.filter(item => {
       if (!item.permission) return true // Always show items without permission requirements
       const { module, action } = item.permission
-      return userPermissions[module]?.[action] === true
+      const hasPermission = userPermissions[module]?.[action] === true
+
+      if (item.name === 'Email Campaigns') {
+        console.log('🔍 Email Campaigns permission check:', {
+          module,
+          action,
+          hasPermission,
+          modulePermissions: userPermissions[module],
+          allUserPermissions: userPermissions
+        })
+      }
+
+      return hasPermission
     })
-  }, [userPermissions])
+  }, [userPermissions, user?.role])
 
   const handleLogout = useCallback(() => {
     dispatch(logout())

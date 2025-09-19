@@ -151,15 +151,15 @@ const RoleManagement = () => {
         console.error('❌ Load roles error:', response.data.error);
         toast.error(errorMessage);
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('❌ Error loading roles:', error);
 
       // Handle specific error types
-      if (error.response?.status === 401) {
+      if (error?.response?.status === 401) {
         toast.error('Authentication required. Please log in again.');
-      } else if (error.response?.status === 403) {
+      } else if (error?.response?.status === 403) {
         toast.error('You do not have permission to view roles.');
-      } else if (error.response?.data?.error?.message) {
+      } else if (error?.response?.data?.error?.message) {
         toast.error(error.response.data.error.message);
       } else {
         toast.error('Failed to load roles. Please try again.');
@@ -178,7 +178,7 @@ const RoleManagement = () => {
       if (response.data.success) {
         setStats(response.data.data);
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('❌ Error loading role stats:', error);
     }
   };
@@ -203,7 +203,7 @@ const RoleManagement = () => {
       } else {
         toast.error(response.data.error?.message || 'Failed to create role');
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('❌ Error creating role:', error);
       toast.error('Failed to create role');
     }
@@ -226,7 +226,7 @@ const RoleManagement = () => {
       } else {
         toast.error(response.data.error?.message || 'Failed to update role');
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('❌ Error updating role:', error);
       toast.error('Failed to update role');
     }
@@ -249,7 +249,7 @@ const RoleManagement = () => {
       } else {
         toast.error(response.data.error?.message || 'Failed to delete role');
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('❌ Error deleting role:', error);
       toast.error('Failed to delete role');
     }
@@ -268,7 +268,7 @@ const RoleManagement = () => {
       } else {
         toast.error(response.data.error?.message || 'Failed to update role status');
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('❌ Error updating role status:', error);
       toast.error('Failed to update role status');
     }
@@ -289,15 +289,15 @@ const RoleManagement = () => {
         console.error('❌ Initialize roles error:', response.data.error);
         toast.error(errorMessage);
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('❌ Error initializing roles:', error);
 
       // Handle specific error types
-      if (error.response?.status === 401) {
+      if (error?.response?.status === 401) {
         toast.error('Authentication required. Please log in again.');
-      } else if (error.response?.status === 403) {
+      } else if (error?.response?.status === 403) {
         toast.error('You do not have permission to initialize roles.');
-      } else if (error.response?.data?.error?.message) {
+      } else if (error?.response?.data?.error?.message) {
         toast.error(error.response.data.error.message);
       } else {
         toast.error('Failed to initialize roles. Please try again.');
@@ -581,9 +581,9 @@ const RoleManagement = () => {
                     <select
                       value={role.status}
                       onChange={(e) => handleStatusChange(role, e.target.value)}
-                      disabled={role.type === 'system'}
+                      disabled={role.type === 'system' && user?.role !== 'superadministrator'}
                       className={`text-xs font-semibold rounded-full px-2 py-1 border-0 ${getStatusColor(role.status)} ${
-                        role.type === 'system' ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'
+                        role.type === 'system' && user?.role !== 'superadministrator' ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'
                       }`}
                     >
                       <option value="active">Active</option>
@@ -603,24 +603,28 @@ const RoleManagement = () => {
                     <div className="flex items-center justify-end space-x-2">
                       <button
                         onClick={() => openEditModal(role)}
-                        disabled={role.type === 'system'}
+                        disabled={role.type === 'system' && user?.role !== 'superadministrator'}
                         className={`text-blue-600 hover:text-blue-900 dark:text-blue-400 dark:hover:text-blue-300 ${
-                          role.type === 'system' ? 'opacity-50 cursor-not-allowed' : ''
+                          role.type === 'system' && user?.role !== 'superadministrator' ? 'opacity-50 cursor-not-allowed' : ''
                         }`}
-                        title={role.type === 'system' ? 'Cannot edit system roles' : 'Edit role'}
+                        title={
+                          role.type === 'system' && user?.role !== 'superadministrator'
+                            ? 'System roles can only be edited by Super Administrators' 
+                            : 'Edit role'
+                        }
                       >
                         <Edit className="w-4 h-4" />
                       </button>
                       
                       <button
                         onClick={() => openDeleteModal(role)}
-                        disabled={role.type === 'system' || role.userCount > 0}
+                        disabled={(role.type === 'system' && user?.role !== 'superadministrator') || role.userCount > 0}
                         className={`text-red-600 hover:text-red-900 dark:text-red-400 dark:hover:text-red-300 ${
-                          role.type === 'system' || role.userCount > 0 ? 'opacity-50 cursor-not-allowed' : ''
+                          (role.type === 'system' && user?.role !== 'superadministrator') || role.userCount > 0 ? 'opacity-50 cursor-not-allowed' : ''
                         }`}
                         title={
-                          role.type === 'system' 
-                            ? 'Cannot delete system roles' 
+                          role.type === 'system' && user?.role !== 'superadministrator'
+                            ? 'System roles can only be deleted by Super Administrators' 
                             : role.userCount > 0 
                             ? 'Cannot delete role with assigned users' 
                             : 'Delete role'

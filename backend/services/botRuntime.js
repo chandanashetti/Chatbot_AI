@@ -34,6 +34,24 @@ class BotRuntime {
         conversation = await this.createNewConversation(sessionId, userInfo);
       }
 
+      // Detect intent for user message
+      let intentData = {};
+      try {
+        const IntentCategorizer = require('./intentCategorizer');
+        const intentCategorizer = new IntentCategorizer();
+        const intentResult = await intentCategorizer.detectChatIntent(message);
+
+        intentData = {
+          intent: intentResult.intent,
+          confidence: intentResult.confidence,
+          category: intentResult.category
+        };
+
+        console.log(`🤖 Intent detected for message: ${intentResult.intent} (${Math.round(intentResult.confidence * 100)}%)`);
+      } catch (error) {
+        console.warn('Intent detection failed:', error.message);
+      }
+
       // Add user message to conversation
       const userMessage = conversation.addMessage({
         content: message,
@@ -41,7 +59,8 @@ class BotRuntime {
         metadata: {
           timestamp: new Date(),
           userAgent: userInfo.userAgent,
-          ipAddress: userInfo.ipAddress
+          ipAddress: userInfo.ipAddress,
+          ...intentData
         }
       });
 
@@ -523,52 +542,97 @@ class BotRuntime {
 
       // GUARD RAIL 1: Use RAG (uploaded documents) if enabled
       if (this.bot.settings.ai.useRAG) {
-        searchResults = await this.searchKnowledgeBase(userMessage);
+        console.log('🔍 Searching Knowledge Base for:', userMessage);
+
+        // Enhanced search query: include conversation context for follow-up questions
+        let searchQuery = userMessage;
+        if (conversation.messages && conversation.messages.length > 0) {
+          const lastFewMessages = conversation.messages.slice(-3).map(m => m.content).join(' ');
+          // If current message is short and might be a follow-up, include previous context
+          if (userMessage.length < 50 && (userMessage.toLowerCase().includes('address') ||
+              userMessage.toLowerCase().includes('location') || userMessage.toLowerCase().includes('where'))) {
+            searchQuery = lastFewMessages + ' ' + userMessage;
+            console.log('🔍 Enhanced search query with context:', searchQuery);
+          }
+        }
+
+        searchResults = await this.searchKnowledgeBase(searchQuery);
+        console.log('📚 KB Search Results:', searchResults.length, 'documents found');
         if (searchResults.length > 0) {
-          const kbContext = searchResults.map((result, index) => 
+          const kbContext = searchResults.map((result, index) =>
             `Document ${index + 1} (${result.document.name}):\n${result.chunk.content}`
           ).join('\n\n');
           context += (context ? '\n\n' : '') + kbContext;
           hasRelevantData = true;
+          console.log('✅ KB context added, length:', kbContext.length);
         }
       }
 
       // GUARD RAIL 2: Use web scraping data if enabled (can be used alongside KB)
       if (this.bot.settings.webScraping?.enabled) {
+        console.log('🌐 Searching Web Scraping Data for:', userMessage);
         const webScrapingResults = await this.searchWebScrapingData(userMessage);
+        console.log('🕷️ Web Scraping Results:', webScrapingResults.length, 'pages found');
         if (webScrapingResults.length > 0) {
-          const webContext = webScrapingResults.map((result, index) => 
+          const webContext = webScrapingResults.map((result, index) =>
             `Web Content ${index + 1} (${result.source}):\n${result.content}`
           ).join('\n\n');
           context += (context ? '\n\n' : '') + webContext;
           hasRelevantData = true;
+          console.log('✅ Web context added, length:', webContext.length);
         }
       }
 
       // GUARD RAIL 3: If no relevant data found, use predefined fallback responses
       if (!hasRelevantData) {
+        console.log('❌ No relevant data found, using fallback response');
         return this.getFallbackResponse(userMessage);
       }
+
+      console.log('📝 Total context length:', context.length, 'characters');
+      console.log('🎯 hasRelevantData:', hasRelevantData);
 
       // GUARD RAIL 4: Build system prompt with strict instructions
       const systemPrompt = this.buildGuardedSystemPrompt(context, conversation);
 
+      // Build conversation history for context
+      const conversationMessages = [
+        { role: 'system', content: systemPrompt }
+      ];
+
+      // Add recent conversation history (last 10 messages to avoid token limits)
+      if (conversation.messages && conversation.messages.length > 0) {
+        const recentMessages = conversation.messages.slice(-10);
+        for (const msg of recentMessages) {
+          if (msg.sender === 'user') {
+            conversationMessages.push({ role: 'user', content: msg.content });
+          } else if (msg.sender === 'bot') {
+            conversationMessages.push({ role: 'assistant', content: msg.content });
+          }
+        }
+      }
+
+      // Add current user message
+      conversationMessages.push({ role: 'user', content: userMessage });
+
+      console.log('💬 Sending', conversationMessages.length, 'messages to OpenAI (including', conversationMessages.length - 2, 'history messages)');
+
       const completion = await this.openaiClient.chat.completions.create({
         model: this.bot.settings.ai.model,
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: userMessage }
-        ],
+        messages: conversationMessages,
         temperature: this.bot.settings.ai.temperature,
         max_tokens: this.bot.settings.ai.maxTokens
       });
 
-      const response = completion.choices[0].message.content;
+      let response = completion.choices[0].message.content;
 
       // GUARD RAIL 5: Validate response doesn't contain internet references
       if (this.containsInternetReferences(response)) {
         return this.getFallbackResponse(userMessage);
       }
+
+      // CRITICAL FIX: Post-process response to ensure first-person company representation
+      response = this.enforceFirstPersonResponse(response);
 
       return response;
 
@@ -583,10 +647,16 @@ class BotRuntime {
     const personality = bot.settings.personality;
     const variables = conversation.flowState.variables;
 
-    let prompt = `You are ${bot.settings.appearance.name || bot.name}, a ${personality.tone} and ${personality.style} AI assistant.
+    let prompt = `You are ${bot.settings.appearance.name || bot.name}, a ${personality.tone} and ${personality.style} AI assistant representing our company directly.
 
-Your role: ${bot.type.replace('_', ' ')} bot.
-Personality: Be ${personality.tone} and ${personality.style} in your responses.
+CRITICAL IDENTITY RULES:
+1. You represent the company/organization directly - use "we", "us", "our" when referring to the company
+2. Speak as an official representative, not as an external observer
+3. When providing company information (address, contact, services), say "our address", "you can reach us", "our services"
+4. NEVER refer to the company in third person ("they", "them", "their company")
+
+Your role: ${bot.type.replace('_', ' ')} bot representing our organization.
+Personality: Be ${personality.tone} and ${personality.style} in your responses while maintaining professional company representation.
 
 Current conversation context:
 - User variables collected: ${JSON.stringify(variables, null, 2)}
@@ -596,10 +666,13 @@ ${context ? `Knowledge Base Context:\n${context}\n` : ''}
 
 Instructions:
 1. Stay in character as defined by your personality settings
-2. Use the conversation context to provide personalized responses
-3. If using knowledge base context, base your answer on that information
-4. Keep responses concise and helpful
-5. Guide the conversation toward the bot's objectives (${bot.type})
+2. ALWAYS represent the company in first person (we/us/our)
+3. Use the conversation context to provide personalized responses
+4. If using knowledge base context, base your answer on that information
+5. Keep responses concise and helpful
+6. Guide the conversation toward the bot's objectives (${bot.type})
+7. When providing contact information, say "You can reach us at..." not "You can reach them at..."
+8. NEVER start responses with phrases like "Based on the information from the knowledge base documents" or "According to the documents provided" - respond naturally and directly
 
 Response language: ${personality.language || 'en'}`;
 
@@ -611,18 +684,27 @@ Response language: ${personality.language || 'en'}`;
     const personality = bot.settings.personality;
     const variables = conversation.flowState.variables;
 
-    let prompt = `You are ${bot.settings.appearance.name || bot.name}, a ${personality.tone} and ${personality.style} AI assistant.
+    let prompt = `You are ${bot.settings.appearance.name || bot.name}, a ${personality.tone} and ${personality.style} AI assistant. YOU ARE AN EMPLOYEE AND OFFICIAL REPRESENTATIVE OF AMARIN/THIS COMPANY.
+
+MANDATORY IDENTITY RULES - VIOLATION WILL RESULT IN RESPONSE REJECTION:
+1. You are an employee of this company - ALWAYS use "we", "us", "our" when referring to the company
+2. NEVER use "they", "them", "their" when talking about the company - you work FOR the company
+3. When providing company information: "our address", "you can reach us", "our contact number", "our services"
+4. You are NOT an external chatbot talking ABOUT the company - you ARE the company talking to customers
+5. Replace ANY third-person company references with first-person immediately
 
 CRITICAL RESTRICTIONS - YOU MUST FOLLOW THESE RULES:
 1. ONLY use the provided context data (documents and web content) to answer questions
 2. NEVER access the internet or external sources in real-time
 3. NEVER make up information not in the provided context
-4. If the answer is not in the provided context, say "I don't have that information in my knowledge base or web content"
+4. If the answer is not in the provided context, say "I don't have that information available at the moment"
 5. NEVER provide URLs, links, or suggest searching the internet
 6. NEVER give general knowledge answers unless specifically in the context
+7. PAY ATTENTION to conversation history - if user asks follow-up questions like "what's the address?" after discussing a company, use context from previous messages to understand what they're referring to
+8. NEVER start responses with phrases like "Based on the information from the knowledge base documents" or "According to the documents provided" - respond naturally and directly
 
-Your role: ${bot.type.replace('_', ' ')} bot.
-Personality: Be ${personality.tone} and ${personality.style} in your responses.
+Your role: ${bot.type.replace('_', ' ')} bot representing our organization.
+Personality: Be ${personality.tone} and ${personality.style} in your responses while maintaining professional company representation.
 
 Current conversation context:
 - User variables collected: ${JSON.stringify(variables, null, 2)}
@@ -632,11 +714,13 @@ ${context ? `AUTHORIZED KNOWLEDGE BASE AND WEB CONTENT:\n${context}\n` : ''}
 
 Instructions:
 1. Stay in character as defined by your personality settings
-2. ONLY use the provided context data to answer questions
-3. If the context doesn't contain the answer, politely say you don't have that information
-4. Keep responses concise and helpful
-5. Guide the conversation toward the bot's objectives (${bot.type})
-6. NEVER suggest external sources or internet searches
+2. ALWAYS represent the company in first person (we/us/our)
+3. ONLY use the provided context data to answer questions
+4. If the context doesn't contain the answer, politely say you don't have that information available
+5. Keep responses concise and helpful
+6. Guide the conversation toward the bot's objectives (${bot.type})
+7. NEVER suggest external sources or internet searches
+8. When providing contact information, say "You can reach us at..." not "You can reach them at..."
 
 Response language: ${personality.language || 'en'}`;
 
@@ -645,9 +729,24 @@ Response language: ${personality.language || 'en'}`;
 
   async searchKnowledgeBase(query) {
     try {
-      const documents = await Document.find(
-        { 
-          $text: { $search: query },
+      console.log(`🔍 RAG Search: "${query}"`);
+
+      // Enhanced query expansion for contact information
+      let expandedQuery = query;
+      const contactKeywords = ['contact', 'phone', 'telephone', 'tel', 'number', 'call', 'reach'];
+      const isContactQuery = contactKeywords.some(keyword =>
+        query.toLowerCase().includes(keyword)
+      );
+
+      if (isContactQuery) {
+        expandedQuery = query + ' contact phone telephone number tel address details';
+        console.log(`📞 Enhanced contact query: "${expandedQuery}"`);
+      }
+
+      // Try text search first
+      let documents = await Document.find(
+        {
+          $text: { $search: expandedQuery },
           status: 'indexed'
         },
         { score: { $meta: 'textScore' } }
@@ -655,14 +754,59 @@ Response language: ${personality.language || 'en'}`;
       .sort({ score: { $meta: 'textScore' } })
       .limit(this.bot.settings.ai.ragSettings.topK || 5);
 
+      console.log(`📚 Text search found: ${documents.length} documents`);
+
+      // If no results from text search, try regex search for contact queries
+      if (documents.length === 0 && isContactQuery) {
+        console.log(`🔄 Fallback: Trying regex search for contact info...`);
+        documents = await Document.find({
+          status: 'indexed',
+          $or: [
+            { textContent: { $regex: /contact|phone|tel|number/i } },
+            { name: { $regex: /contact|phone|directory/i } }
+          ]
+        }).limit(this.bot.settings.ai.ragSettings.topK || 5);
+
+        console.log(`📱 Regex search found: ${documents.length} documents`);
+      }
+
+      // If still no results, try searching by company name mentioned in query
+      if (documents.length === 0) {
+        const companyNames = this.extractCompanyNames(query);
+        if (companyNames.length > 0) {
+          console.log(`🏢 Searching by company names: ${companyNames.join(', ')}`);
+          documents = await Document.find({
+            status: 'indexed',
+            $or: companyNames.map(name => ({
+              textContent: { $regex: new RegExp(name, 'i') }
+            }))
+          }).limit(this.bot.settings.ai.ragSettings.topK || 5);
+
+          console.log(`🏢 Company search found: ${documents.length} documents`);
+        }
+      }
+
       const results = [];
       for (const doc of documents) {
+        // Enhanced chunk filtering for contact information
         const matchingChunks = doc.chunks.filter(chunk => {
           const chunkContent = chunk.content.toLowerCase();
-          const searchTerms = query.toLowerCase().split(' ').filter(term => term.length > 2);
-          return chunkContent.includes(query.toLowerCase()) || 
+          const searchTerms = expandedQuery.toLowerCase().split(' ').filter(term => term.length > 2);
+
+          // For contact queries, look for specific patterns
+          if (isContactQuery) {
+            const hasContactInfo = /(?:tel|phone|contact|call|number|address).*[\d\-\(\)\s]{7,}/i.test(chunk.content) ||
+                                  /(?:address|location|office).*[\w\s,]+/i.test(chunk.content);
+            if (hasContactInfo) {
+              console.log(`📞 Found contact info in chunk: ${chunk.content.substring(0, 100)}...`);
+              return true;
+            }
+          }
+
+          // Standard keyword matching
+          return chunkContent.includes(query.toLowerCase()) ||
                  searchTerms.some(term => chunkContent.includes(term));
-        }).slice(0, 2);
+        }).slice(0, 3); // Increased from 2 to 3 for contact info
 
         for (const chunk of matchingChunks) {
           results.push({
@@ -671,7 +815,8 @@ Response language: ${personality.language || 'en'}`;
               content: chunk.content,
               metadata: {
                 ...chunk.metadata,
-                source: doc.name
+                source: doc.name,
+                isContactInfo: isContactQuery
               }
             },
             score: Math.random() * 0.3 + 0.7,
@@ -684,6 +829,7 @@ Response language: ${personality.language || 'en'}`;
         }
       }
 
+      console.log(`✅ RAG Search Results: ${results.length} chunks found`);
       return results.slice(0, this.bot.settings.ai.ragSettings.topK || 5);
     } catch (error) {
       console.error('Knowledge base search error:', error);
@@ -691,14 +837,32 @@ Response language: ${personality.language || 'en'}`;
     }
   }
 
+  // Helper method to extract company names from queries
+  extractCompanyNames(query) {
+    const companyPatterns = [
+      /(?:amarin|book center|bookstore)/gi,
+      /(?:company|corp|corporation|ltd|limited|inc)/gi
+    ];
+
+    const matches = [];
+    companyPatterns.forEach(pattern => {
+      const found = query.match(pattern);
+      if (found) {
+        matches.push(...found.map(m => m.trim()));
+      }
+    });
+
+    return [...new Set(matches)]; // Remove duplicates
+  }
+
   async searchWebScrapingData(query) {
     try {
       const ScrapedContent = require('../models/ScrapedContent');
       
       const scrapedContent = await ScrapedContent.find(
-        { 
+        {
           $text: { $search: query },
-          status: 'processed'
+          status: 'success'
         },
         { score: { $meta: 'textScore' } }
       )
@@ -731,34 +895,106 @@ Response language: ${personality.language || 'en'}`;
 
   getFallbackResponse(userMessage) {
     const fallbackResponses = [
-      "I don't have that information in my knowledge base. Could you please rephrase your question or ask about something else?",
-      "I'm sorry, but I don't have access to that information. Is there something else I can help you with?",
-      "That's not something I have information about. Let me know if you have any other questions!",
-      "I don't have that information available. Could you try asking about something else?",
-      "I'm not able to provide information on that topic. Is there anything else I can assist you with?"
+      "I don't have that information available at the moment. Could you please rephrase your question or ask about something else we can help with?",
+      "I'm sorry, but I don't have access to that information. Is there something else we can assist you with?",
+      "That's not something I have information about right now. Let me know if you have any other questions about our services!",
+      "I don't have that information available currently. Could you try asking about something else we offer?",
+      "I'm not able to provide information on that topic at the moment. Is there anything else we can help you with?"
     ];
 
-    // Simple keyword matching for common questions
+    // Simple keyword matching for common questions - with company representation
     const message = userMessage.toLowerCase();
-    
+
     if (message.includes('hello') || message.includes('hi') || message.includes('hey')) {
-      return "Hello! How can I help you today?";
+      return "Hello! How can we help you today?";
     }
-    
+
     if (message.includes('thank') || message.includes('thanks')) {
-      return "You're welcome! Is there anything else I can help you with?";
+      return "You're welcome! Is there anything else we can help you with?";
     }
-    
+
     if (message.includes('bye') || message.includes('goodbye') || message.includes('see you')) {
-      return "Goodbye! Have a great day!";
+      return "Goodbye! Thank you for contacting us. Have a great day!";
     }
-    
+
     if (message.includes('help') || message.includes('what can you do')) {
-      return "I can help answer questions based on the information in my knowledge base. What would you like to know?";
+      return "We can help answer questions about our services and company. What would you like to know?";
     }
 
     // Return random fallback response
     return fallbackResponses[Math.floor(Math.random() * fallbackResponses.length)];
+  }
+
+  // CRITICAL FIX: Enforce first-person company representation
+  enforceFirstPersonResponse(response) {
+    if (!response) return response;
+
+    let fixedResponse = response;
+
+    // Replace third-person company references with first-person
+    const thirdPersonFixes = [
+      // Basic pronouns
+      { pattern: /\btheir\s+(contact|phone|number|address|office|store|service|website|email|location)/gi, replacement: 'our $1' },
+      { pattern: /\btheir\s+(bookstore|company|business|organization|headquarters)/gi, replacement: 'our $1' },
+      { pattern: /\bthey\s+(offer|provide|have|are|operate|run|specialize)/gi, replacement: 'we $1' },
+      { pattern: /\bthem\s+(at|for|about)/gi, replacement: 'us $1' },
+
+      // Company-specific fixes
+      { pattern: /\bAmarin's\s+(contact|phone|number|address|office|store|service)/gi, replacement: 'our $1' },
+      { pattern: /\bAmarin\s+(offers|provides|has|operates|runs|specializes)/gi, replacement: 'We $1' },
+      { pattern: /\bthe\s+company's\s+(contact|phone|number|address|office|store)/gi, replacement: 'our $1' },
+      { pattern: /\bthe\s+company\s+(offers|provides|has|operates|runs|specializes)/gi, replacement: 'we $1' },
+
+      // Contact-specific fixes
+      { pattern: /you can reach them at/gi, replacement: 'you can reach us at' },
+      { pattern: /contact them at/gi, replacement: 'contact us at' },
+      { pattern: /reach out to them/gi, replacement: 'reach out to us' },
+      { pattern: /call them at/gi, replacement: 'call us at' },
+
+      // Business operation fixes
+      { pattern: /they are located at/gi, replacement: 'we are located at' },
+      { pattern: /their location is/gi, replacement: 'our location is' },
+      { pattern: /their address is/gi, replacement: 'our address is' },
+      { pattern: /their main office/gi, replacement: 'our main office' },
+      { pattern: /their headquarters/gi, replacement: 'our headquarters' },
+
+      // Service fixes
+      { pattern: /their services include/gi, replacement: 'our services include' },
+      { pattern: /they offer services/gi, replacement: 'we offer services' },
+      { pattern: /their bookstore/gi, replacement: 'our bookstore' },
+      { pattern: /their business/gi, replacement: 'our business' },
+
+      // Generic company references
+      { pattern: /if you are looking for their/gi, replacement: 'if you are looking for our' },
+      { pattern: /about their company/gi, replacement: 'about our company' },
+      { pattern: /visit their website/gi, replacement: 'visit our website' }
+    ];
+
+    // Apply all fixes
+    thirdPersonFixes.forEach(fix => {
+      fixedResponse = fixedResponse.replace(fix.pattern, fix.replacement);
+    });
+
+    // Additional check for missed third-person references
+    if (this.containsThirdPersonReferences(fixedResponse)) {
+      console.warn('⚠️ Third-person references still detected after fixes:', fixedResponse);
+    }
+
+    return fixedResponse;
+  }
+
+  // Check if response still contains third-person references
+  containsThirdPersonReferences(response) {
+    const thirdPersonPatterns = [
+      /\btheir\s+(contact|phone|number|address|office|store|service|website|email|location|bookstore|company|business)/i,
+      /\bthey\s+(offer|provide|have|are|operate|run|specialize)/i,
+      /you can reach them at/i,
+      /contact them at/i,
+      /their address is/i,
+      /their location/i
+    ];
+
+    return thirdPersonPatterns.some(pattern => pattern.test(response));
   }
 
   containsInternetReferences(response) {
@@ -1166,22 +1402,102 @@ Response language: ${personality.language || 'en'}`;
         };
       }
 
-      // Use custom prompt if provided, otherwise use general prompt
-      const systemPrompt = node.data.aiPrompt || this.buildSystemPrompt('', conversation);
+      // Get context from KB and web scraping - SAME AS generateAIResponse
+      let context = '';
+      let searchResults = [];
+      let hasRelevantData = false;
+
+      console.log('🤖 AI Response Node - Settings check:');
+      console.log('   RAG enabled:', this.bot.settings.ai.useRAG);
+      console.log('   Web scraping enabled:', this.bot.settings.webScraping?.enabled);
+
+      // GUARD RAIL 1: Use RAG (uploaded documents) if enabled
+      if (this.bot.settings.ai.useRAG) {
+        console.log('🔍 [AI Node] Searching Knowledge Base for:', userMessage || 'Hello');
+        searchResults = await this.searchKnowledgeBase(userMessage || 'Hello');
+        console.log('📚 [AI Node] KB Search Results:', searchResults.length, 'documents found');
+        if (searchResults.length > 0) {
+          const kbContext = searchResults.map((result, index) =>
+            `Document ${index + 1} (${result.document.name}):\n${result.chunk.content}`
+          ).join('\n\n');
+          context += (context ? '\n\n' : '') + kbContext;
+          hasRelevantData = true;
+          console.log('✅ [AI Node] KB context added, length:', kbContext.length);
+        }
+      }
+
+      // GUARD RAIL 2: Use web scraping data if enabled (can be used alongside KB)
+      if (this.bot.settings.webScraping?.enabled) {
+        console.log('🌐 [AI Node] Searching Web Scraping Data for:', userMessage || 'Hello');
+        const webScrapingResults = await this.searchWebScrapingData(userMessage || 'Hello');
+        console.log('🕷️ [AI Node] Web Scraping Results:', webScrapingResults.length, 'pages found');
+        if (webScrapingResults.length > 0) {
+          const webContext = webScrapingResults.map((result, index) =>
+            `Web Content ${index + 1} (${result.source}):\n${result.content}`
+          ).join('\n\n');
+          context += (context ? '\n\n' : '') + webContext;
+          hasRelevantData = true;
+          console.log('✅ [AI Node] Web context added, length:', webContext.length);
+        }
+      }
+
+      // GUARD RAIL 3: If no relevant data found, use predefined fallback responses
+      if (!hasRelevantData) {
+        return {
+          content: this.getFallbackResponse(userMessage || 'Hello'),
+          type: 'text',
+          nodeId: node.id
+        };
+      }
+
+      // Use custom prompt if provided, otherwise use guarded system prompt with context
+      const systemPrompt = node.data.aiPrompt || this.buildGuardedSystemPrompt(context, conversation);
       const model = node.data.aiModel || this.bot.settings.ai.model || 'gpt-3.5-turbo';
       const temperature = node.data.temperature || this.bot.settings.ai.temperature || 0.7;
 
+      // Build conversation history for context
+      const conversationMessages = [
+        { role: 'system', content: systemPrompt }
+      ];
+
+      // Add recent conversation history (last 10 messages to avoid token limits)
+      if (conversation.messages && conversation.messages.length > 0) {
+        const recentMessages = conversation.messages.slice(-10);
+        for (const msg of recentMessages) {
+          if (msg.sender === 'user') {
+            conversationMessages.push({ role: 'user', content: msg.content });
+          } else if (msg.sender === 'bot') {
+            conversationMessages.push({ role: 'assistant', content: msg.content });
+          }
+        }
+      }
+
+      // Add current user message
+      conversationMessages.push({ role: 'user', content: userMessage || 'Hello' });
+
+      console.log('💬 [AI Node] Sending', conversationMessages.length, 'messages to OpenAI (including', conversationMessages.length - 2, 'history messages)');
+
       const completion = await this.openaiClient.chat.completions.create({
         model,
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: userMessage || 'Hello' }
-        ],
+        messages: conversationMessages,
         temperature,
         max_tokens: this.bot.settings.ai.maxTokens || 1000
       });
 
-      const aiResponse = completion.choices[0].message.content;
+      let aiResponse = completion.choices[0].message.content;
+
+      // GUARD RAIL 5: Validate response doesn't contain internet references
+      if (this.containsInternetReferences(aiResponse)) {
+        return {
+          content: this.getFallbackResponse(userMessage || 'Hello'),
+          type: 'text',
+          nodeId: node.id
+        };
+      }
+
+      // CRITICAL FIX: Post-process response to ensure first-person company representation
+      aiResponse = this.enforceFirstPersonResponse(aiResponse);
+
       const nextNode = this.findNextNode(node, conversation);
 
       return {

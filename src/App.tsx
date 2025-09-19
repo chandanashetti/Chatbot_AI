@@ -16,6 +16,7 @@ import BotSettings from './pages/admin/BotSettings'
 import KnowledgeBase from './pages/admin/KnowledgeBase'
 import Logs from './pages/admin/Logs'
 import Analytics from './pages/admin/Analytics'
+import EmailCampaigns from './pages/admin/EmailCampaigns'
 import AdminSettings from './pages/admin/Settings'
 import ThemeProvider from './components/providers/ThemeProvider'
 import GlobalChatWidget from './components/widgets/GlobalChatWidget'
@@ -58,6 +59,7 @@ function App() {
               <Route path="knowledge-base" element={<KnowledgeBase />} />
               <Route path="logs" element={<Logs />} />
               <Route path="analytics" element={<Analytics />} />
+              <Route path="email-campaigns" element={<EmailCampaigns />} />
               <Route path="settings" element={<AdminSettings />} />
             </Route>
 

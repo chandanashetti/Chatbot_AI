@@ -1525,6 +1525,8 @@ const authRoutes = require('./routes/auth');
 const userRoutes = require('./routes/users');
 const roleRoutes = require('./routes/roles');
 const settingsRoutes = require('./routes/settings');
+const knowledgeBaseRoutes = require('./routes/knowledgeBase');
+const ragRoutes = require('./routes/rag');
 const webScrapingRoutes = require('./routes/webScraping');
 const channelAccountRoutes = require('./routes/channel-accounts');
 const conversationRoutes = require('./routes/conversations');
@@ -1542,9 +1544,12 @@ app.use('/api/bots', authenticate, requirePermission('bots', 'view'), botRoutes)
 app.use('/api/widget', widgetRoutes); // Public widget endpoints
 app.use('/api/deployment', authenticate, requirePermission('bots', 'publish'), deploymentRoutes);
 app.use('/api/analytics', authenticate, requirePermission('analytics', 'view'), analyticsRoutes);
+app.use('/api/debug', require('./routes/debug-kb')); // Debug KB routes
 app.use('/api/agents', authenticate, requirePermission('agents', 'view'), agentRoutes);
 app.use('/api/handoffs', authenticate, requirePermission('handoffs', 'view'), handoffRoutes);
 app.use('/api/settings', authenticate, requirePermission('settings', 'view'), settingsRoutes);
+app.use('/api/knowledge-base', authenticate, requirePermission('bots', 'edit'), knowledgeBaseRoutes);
+app.use('/api/rag', authenticate, requirePermission('bots', 'edit'), ragRoutes);
 app.use('/api/web-scraping', authenticate, requirePermission('settings', 'edit'), webScrapingRoutes);
 app.use('/api/channel-accounts', authenticate, requirePermission('bots', 'edit'), channelAccountRoutes);
 app.use('/api/conversations', authenticate, requirePermission('chat', 'view'), conversationRoutes);

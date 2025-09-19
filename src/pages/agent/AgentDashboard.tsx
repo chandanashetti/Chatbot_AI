@@ -247,6 +247,11 @@ const AgentDashboard = () => {
   };
 
   const handleAcceptHandoff = async (requestId: string) => {
+    if (!currentAgentId) {
+      toast.error('Agent ID not available');
+      return;
+    }
+
     try {
       console.log(`✅ Accepting handoff ${requestId}...`);
       await handoffAPI.acceptHandoff(requestId, currentAgentId);
@@ -259,6 +264,11 @@ const AgentDashboard = () => {
   };
 
   const handleDeclineHandoff = async (requestId: string, reason?: string) => {
+    if (!currentAgentId) {
+      toast.error('Agent ID not available');
+      return;
+    }
+
     try {
       console.log(`❌ Declining handoff ${requestId}...`);
       await handoffAPI.declineHandoff(requestId, currentAgentId, reason);

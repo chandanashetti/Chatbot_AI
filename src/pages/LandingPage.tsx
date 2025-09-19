@@ -128,11 +128,11 @@ const LandingPage = () => {
                 Demo
               </Link>
               
-              <Link 
-                to="/login" 
+              <Link
+                to="/login"
                 className="bg-gradient-to-r from-blue-600 to-purple-600 text-white px-6 py-2.5 rounded-lg font-medium hover:shadow-lg hover:scale-105 transition-all duration-200"
               >
-                Get Started Free
+                Get Started
               </Link>
             </div>
           </div>
@@ -169,19 +169,19 @@ const LandingPage = () => {
               
               {/* CTAs */}
               <div className="flex flex-col sm:flex-row gap-4 justify-center lg:justify-start mb-12 animate-fade-in-up animation-delay-300">
-                <Link 
-                  to="/chat" 
+                <Link
+                  to="/chat"
                   className="bg-gradient-to-r from-blue-600 to-purple-600 text-white px-8 py-4 rounded-lg font-semibold text-lg hover:shadow-xl hover:scale-105 transition-all duration-300 group transform hover:-translate-y-1"
                 >
-                  Start Building Free
+                  Start Building
                   <ArrowRight className="w-5 h-5 ml-2 inline group-hover:translate-x-1 transition-transform" />
                 </Link>
                 
-                <Link 
-                  to="/login" 
+                <Link
+                  to="/login"
                   className="bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 px-8 py-4 rounded-lg font-semibold text-lg border border-slate-300 dark:border-slate-600 hover:bg-slate-50 dark:hover:bg-slate-700 hover:scale-105 transition-all duration-300 transform hover:-translate-y-1"
                 >
-                  Watch Demo
+                  Get Started
                 </Link>
               </div>
 
@@ -508,11 +508,11 @@ const LandingPage = () => {
           </p>
           
           <div className="flex flex-col sm:flex-row gap-4 justify-center mb-8 animate-fade-in-up animation-delay-200">
-            <Link 
-              to="/chat" 
+            <Link
+              to="/chat"
               className="bg-white text-blue-600 px-8 py-4 rounded-lg font-semibold text-lg hover:bg-blue-50 hover:scale-105 hover:-translate-y-1 transition-all duration-300 group shadow-xl"
             >
-              Start Building Free
+              Start Building
               <ArrowRight className="w-5 h-5 ml-2 inline group-hover:translate-x-1 transition-transform" />
             </Link>
             

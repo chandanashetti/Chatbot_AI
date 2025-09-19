@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const Bot = require('../models/Bot');
 const BotConversation = require('../models/BotConversation');
+const BotRuntime = require('../services/botRuntime');
 const { v4: uuidv4 } = require('uuid');
 const database = require('../config/database');
 const { getOrCreateDefaultUser } = require('../utils/userHelper');
@@ -9,6 +10,12 @@ const { getOrCreateDefaultUser } = require('../utils/userHelper');
 // Middleware for bot ownership verification
 const verifyBotOwnership = async (req, res, next) => {
   try {
+    // Validate ObjectId format
+    const mongoose = require('mongoose');
+    if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
+      return res.status(400).json({ error: 'Invalid bot ID format' });
+    }
+
     const bot = await Bot.findById(req.params.id);
     if (!bot) {
       return res.status(404).json({ error: 'Bot not found' });
@@ -429,6 +436,241 @@ router.get('/:id/conversations', verifyBotOwnership, async (req, res) => {
     res.status(500).json({ error: 'Failed to get conversations', details: error.message });
   }
 });
+
+// POST /api/bots/:id/validate - Validate bot flow only (debug endpoint)
+router.post('/:id/validate', verifyBotOwnership, async (req, res) => {
+  try {
+    const bot = req.bot;
+
+    console.log('🔍 Validating flow for bot:', bot.name);
+    console.log('📊 Flow structure:', JSON.stringify({
+      nodes: bot.flow.nodes.map(n => ({ id: n.id, type: n.type, data: n.data })),
+      connections: bot.flow.connections
+    }, null, 2));
+
+    // Validate flow structure
+    const validationErrors = validateBotFlow(bot.flow);
+
+    if (validationErrors.length > 0) {
+      console.log('❌ Validation errors found:', validationErrors);
+      return res.status(400).json({
+        success: false,
+        error: 'Flow validation failed',
+        validationErrors,
+        details: 'Please configure all required nodes before testing',
+        flowDebug: {
+          nodeCount: bot.flow.nodes.length,
+          connectionCount: bot.flow.connections.length,
+          nodeTypes: bot.flow.nodes.map(n => n.type)
+        }
+      });
+    }
+
+    console.log('✅ Flow validation passed');
+    res.json({
+      success: true,
+      message: 'Flow validation passed',
+      flowDebug: {
+        nodeCount: bot.flow.nodes.length,
+        connectionCount: bot.flow.connections.length,
+        nodeTypes: bot.flow.nodes.map(n => n.type)
+      }
+    });
+
+  } catch (error) {
+    console.error('Validate bot flow error:', error);
+    res.status(500).json({
+      error: 'Failed to validate bot flow',
+      details: error.message,
+      success: false
+    });
+  }
+});
+
+// POST /api/bots/:id/test - Test bot flow
+router.post('/:id/test', verifyBotOwnership, async (req, res) => {
+  try {
+    const { message, sessionId } = req.body;
+    const bot = req.bot;
+
+    if (!message || !sessionId) {
+      return res.status(400).json({
+        error: 'Message and session ID are required',
+        success: false
+      });
+    }
+
+    // Validate flow structure
+    const validationErrors = validateBotFlow(bot.flow);
+    if (validationErrors.length > 0) {
+      return res.status(400).json({
+        success: false,
+        error: 'Flow validation failed',
+        validationErrors,
+        details: 'Please configure all required nodes before testing'
+      });
+    }
+
+    // Process the message through the BotRuntime
+    const botRuntime = new BotRuntime(bot);
+    const response = await botRuntime.processMessage(message, sessionId, { isTest: true });
+
+    res.json({
+      success: true,
+      response: response.content,
+      nodeId: response.id,
+      metadata: response.metadata
+    });
+
+  } catch (error) {
+    console.error('Test bot flow error:', error);
+    res.status(500).json({
+      error: 'Failed to test bot flow',
+      details: error.message,
+      success: false
+    });
+  }
+});
+
+// Flow validation helper function
+const validateBotFlow = (flow) => {
+  const errors = [];
+
+  if (!flow || !flow.nodes || flow.nodes.length === 0) {
+    errors.push({
+      type: 'FLOW_EMPTY',
+      message: 'Flow must contain at least one node',
+      nodeId: null
+    });
+    return errors;
+  }
+
+  // Check for start node
+  const startNodes = flow.nodes.filter(node => node.type === 'start');
+  if (startNodes.length === 0) {
+    errors.push({
+      type: 'NO_START_NODE',
+      message: 'Flow must contain at least one start node',
+      nodeId: null
+    });
+  }
+
+  // Validate each node
+  flow.nodes.forEach(node => {
+    switch (node.type) {
+      case 'message':
+        if (!node.data?.content || node.data.content.trim() === '') {
+          errors.push({
+            type: 'MISSING_CONTENT',
+            message: 'Message node must have content',
+            nodeId: node.id,
+            nodeName: node.data?.label || node.data?.title || 'Unnamed Message Node'
+          });
+        }
+        break;
+
+      case 'quick_replies':
+      case 'quick-replies':
+      case 'quickreplies':
+        if (!node.data?.options || node.data.options.length === 0) {
+          errors.push({
+            type: 'MISSING_QUICK_REPLY_OPTIONS',
+            message: 'Quick replies node must have at least one option',
+            nodeId: node.id,
+            nodeName: node.data?.label || node.data?.title || 'Unnamed Quick Replies Node'
+          });
+        } else {
+          // Check if quick reply options have text
+          const emptyOptions = node.data.options.filter(option => !option.text || option.text.trim() === '');
+          if (emptyOptions.length > 0) {
+            errors.push({
+              type: 'EMPTY_QUICK_REPLY_OPTIONS',
+              message: 'Quick replies options must have text',
+              nodeId: node.id,
+              nodeName: node.data?.label || node.data?.title || 'Unnamed Quick Replies Node'
+            });
+          }
+        }
+        break;
+
+      case 'input':
+        if (!node.data?.inputType) {
+          errors.push({
+            type: 'MISSING_INPUT_TYPE',
+            message: 'Input node must have an input type configured',
+            nodeId: node.id,
+            nodeName: node.data?.label || node.data?.title || 'Unnamed Input Node'
+          });
+        }
+        break;
+
+      case 'condition':
+        if (!node.data?.conditions || node.data.conditions.length === 0) {
+          errors.push({
+            type: 'MISSING_CONDITIONS',
+            message: 'Condition node must have at least one condition',
+            nodeId: node.id,
+            nodeName: node.data?.label || node.data?.title || 'Unnamed Condition Node'
+          });
+        }
+        break;
+
+      case 'action':
+        if (!node.data?.actionType) {
+          errors.push({
+            type: 'MISSING_ACTION_TYPE',
+            message: 'Action node must have an action type configured',
+            nodeId: node.id,
+            nodeName: node.data?.label || node.data?.title || 'Unnamed Action Node'
+          });
+        }
+        break;
+
+      case 'api':
+        if (!node.data?.url || !node.data?.method) {
+          errors.push({
+            type: 'MISSING_API_CONFIG',
+            message: 'API node must have URL and method configured',
+            nodeId: node.id,
+            nodeName: node.data?.label || node.data?.title || 'Unnamed API Node'
+          });
+        }
+        break;
+
+      case 'start':
+        // Start nodes are always valid
+        break;
+
+      default:
+        // For any other node types, just check if they have basic configuration
+        console.log(`Unknown node type: ${node.type} - allowing it to pass validation`);
+        break;
+    }
+  });
+
+  // Check for isolated nodes (nodes with no connections)
+  if (flow.connections && flow.nodes.length > 1) {
+    const connectedNodeIds = new Set();
+    flow.connections.forEach(conn => {
+      connectedNodeIds.add(conn.source);
+      connectedNodeIds.add(conn.target);
+    });
+
+    flow.nodes.forEach(node => {
+      if (node.type !== 'start' && !connectedNodeIds.has(node.id)) {
+        errors.push({
+          type: 'ISOLATED_NODE',
+          message: 'Node is not connected to the flow',
+          nodeId: node.id,
+          nodeName: node.data?.label || `Unnamed ${node.type} Node`
+        });
+      }
+    });
+  }
+
+  return errors;
+};
+
 
 // GET /api/bots/:id/analytics - Get bot analytics
 router.get('/:id/analytics', verifyBotOwnership, async (req, res) => {

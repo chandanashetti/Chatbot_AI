@@ -72,6 +72,16 @@ const permissionsSchema = new mongoose.Schema({
     accept: { type: Boolean, default: false },
     reject: { type: Boolean, default: false },
     manage: { type: Boolean, default: false }
+  },
+
+  // Marketing/Email Campaign permissions
+  marketing: {
+    view: { type: Boolean, default: false },
+    create: { type: Boolean, default: false },
+    edit: { type: Boolean, default: false },
+    delete: { type: Boolean, default: false },
+    send: { type: Boolean, default: false },
+    analytics: { type: Boolean, default: false }
   }
 }, { _id: false });
 
@@ -373,7 +383,8 @@ userSchema.methods.getDefaultPermissions = function() {
       knowledgeBase: { view: true, upload: true, edit: true, delete: false },
       settings: { view: true, edit: true, system: false },
       chat: { view: true, moderate: true, export: true },
-      handoffs: { view: true, accept: true, reject: true, manage: true }
+      handoffs: { view: true, accept: true, reject: true, manage: true },
+      marketing: { view: true, create: true, edit: true, delete: false, send: true, analytics: true }
     },
     manager: {
       dashboard: { view: true, export: false },
@@ -469,7 +480,8 @@ userSchema.methods.getRolePermissions = function() {
       knowledgeBase: { view: true, upload: true, edit: true, delete: true },
       settings: { view: true, edit: true, system: true },
       chat: { view: true, moderate: true, export: true },
-      handoffs: { view: true, accept: true, reject: true, manage: true }
+      handoffs: { view: true, accept: true, reject: true, manage: true },
+      marketing: { view: true, create: true, edit: true, delete: true, send: true, analytics: true }
     },
     admin: {
       dashboard: { view: true, export: true },
@@ -480,7 +492,8 @@ userSchema.methods.getRolePermissions = function() {
       knowledgeBase: { view: true, upload: true, edit: true, delete: false },
       settings: { view: true, edit: true, system: false },
       chat: { view: true, moderate: true, export: true },
-      handoffs: { view: true, accept: true, reject: true, manage: true }
+      handoffs: { view: true, accept: true, reject: true, manage: true },
+      marketing: { view: true, create: true, edit: true, delete: false, send: true, analytics: true }
     },
     manager: {
       dashboard: { view: true, export: true },
@@ -490,7 +503,8 @@ userSchema.methods.getRolePermissions = function() {
       analytics: { view: true, export: true, advanced: false },
       knowledgeBase: { view: true, upload: true, edit: true, delete: false },
       settings: { view: true, edit: false, system: false },
-      chat: { view: true, moderate: true, export: true }
+      chat: { view: true, moderate: true, export: true },
+      marketing: { view: true, create: true, edit: true, delete: false, send: true, analytics: true }
     },
     operator: {
       dashboard: { view: true, export: false },

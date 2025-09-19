@@ -357,12 +357,116 @@ router.get('/export', async (req, res) => {
   }
 });
 
+// GET /api/analytics/chat-categories - Get chat categories with counts using AI intent detection
+router.get('/chat-categories', async (req, res) => {
+  try {
+    console.log('📊 Fetching AI-powered chat categories analytics...');
+    const { startDate, endDate } = parseDateRange(req);
+
+    // Get all conversations within date range
+    const conversations = await BotConversation.find({
+      createdAt: { $gte: startDate, $lte: endDate }
+    });
+
+    const chatSessions = await ChatSession.find({
+      createdAt: { $gte: startDate, $lte: endDate }
+    });
+
+    // Combine both conversation types
+    const allConversations = [...conversations, ...chatSessions];
+
+    console.log(`🤖 Processing ${allConversations.length} conversations with AI intent detection...`);
+
+    let categories = {
+      complaints: { count: 0, percentage: 0 },
+      queries: { count: 0, percentage: 0 },
+      feedback: { count: 0, percentage: 0 },
+      purchase: { count: 0, percentage: 0 },
+      order_related: { count: 0, percentage: 0 },
+      support: { count: 0, percentage: 0 },
+      general: { count: 0, percentage: 0 }
+    };
+
+    if (allConversations.length > 0) {
+      // Use AI-powered intent categorization
+      const IntentCategorizer = require('../services/intentCategorizer');
+      const intentCategorizer = new IntentCategorizer();
+
+      const categorizationResult = await intentCategorizer.categorizeConversations(allConversations);
+      categories = categorizationResult.categories;
+
+      console.log(`✅ AI categorization completed for ${categorizationResult.totalConversations} conversations`);
+    } else {
+      // No conversations found - return empty but valid data
+      console.log('📝 No conversations found in date range');
+    }
+
+    res.json({
+      success: true,
+      data: {
+        categories,
+        totalConversations: allConversations.length,
+        dateRange: { startDate, endDate },
+        method: 'ai_intent_detection'
+      }
+    });
+
+  } catch (error) {
+    console.error('❌ AI chat categories error:', error);
+
+    res.status(500).json({
+      success: false,
+      error: 'Failed to categorize conversations',
+      details: error.message,
+      dateRange: parseDateRange(req)
+    });
+  }
+});
+
+// GET /api/analytics/test-intent - Test AI intent categorization
+router.get('/test-intent', async (req, res) => {
+  try {
+    const { message } = req.query;
+
+    if (!message) {
+      return res.status(400).json({
+        success: false,
+        error: 'Please provide a message parameter to test intent detection'
+      });
+    }
+
+    const IntentCategorizer = require('../services/intentCategorizer');
+    const intentCategorizer = new IntentCategorizer();
+
+    console.log(`🧪 Testing intent detection for message: "${message}"`);
+
+    const intentResult = await intentCategorizer.detectChatIntent(message);
+
+    res.json({
+      success: true,
+      data: {
+        message,
+        intentResult,
+        timestamp: new Date()
+      }
+    });
+
+  } catch (error) {
+    console.error('Intent test error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to test intent detection',
+      details: error.message
+    });
+  }
+});
+
 // GET /api/analytics/test - Test endpoint to check data
 router.get('/test', async (req, res) => {
   try {
     const conversations = await BotConversation.find({}).limit(5);
     const bots = await Bot.find({});
-    
+
     res.json({
       success: true,
       data: {

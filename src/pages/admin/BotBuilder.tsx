@@ -77,7 +77,8 @@ import {
   Languages,
   Hash,
   ClipboardList,
-  Menu
+  Menu,
+  Play
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 
@@ -92,6 +93,7 @@ const BotBuilder = () => {
   const [selectedNode, setSelectedNode] = useState<string | null>(null)
   const [connectingFrom, setConnectingFrom] = useState<string | null>(null)
   const [draggedConnection, setDraggedConnection] = useState<{x: number, y: number} | null>(null)
+  const [draggingNode, setDraggingNode] = useState<{nodeId: string, offset: {x: number, y: number}} | null>(null)
   const [testMessages, setTestMessages] = useState<Array<{id: string, content: string, sender: 'user' | 'bot', timestamp: Date}>>([])
   const [testSessionId, setTestSessionId] = useState<string | null>(null)
   const [testInput, setTestInput] = useState('')
@@ -110,10 +112,51 @@ const BotBuilder = () => {
     }
   }, [bot, navigate])
 
+  // Helper function to find the first message in the flow
+  const getFirstFlowMessage = () => {
+    if (!bot?.flow?.nodes) return null
+
+    // Find start node or first message node
+    const startNode = bot.flow.nodes.find(node =>
+      node.type === 'start' ||
+      node.data?.isStart ||
+      node.type === 'message'
+    )
+
+    if (!startNode) return null
+
+    // If it's a start node, find the connected message node
+    if (startNode.type === 'start') {
+      const connections = bot.flow.connections || []
+      const startConnection = connections.find(conn => conn.source === startNode.id)
+
+      if (startConnection) {
+        const connectedNode = bot.flow.nodes.find(node => node.id === startConnection.target)
+        if (connectedNode && connectedNode.type === 'message') {
+          return connectedNode.data?.content || 'Hello! How can I help you?'
+        }
+      }
+    }
+
+    // If it's directly a message node
+    if (startNode.type === 'message') {
+      return startNode.data?.content || 'Hello! How can I help you?'
+    }
+
+    return null
+  }
+
   const nodeCategories = {
     basic: {
       name: 'Basic Nodes',
       nodes: [
+        {
+          type: 'start',
+          name: 'Start',
+          icon: Play,
+          color: 'bg-green-100 text-green-600 border-green-200',
+          description: 'Entry point for the conversation flow'
+        },
         {
           type: 'message',
           name: 'Message',
@@ -652,8 +695,9 @@ const BotBuilder = () => {
         type: nodeType as any,
         position: { x: x - 75, y: y - 40 }, // Center the node
         data: {
-          title: `New ${nodeType}`,
-          content: nodeType === 'message' ? 'Hello! How can I help you?' : ''
+          title: nodeType === 'start' ? 'Start' : `New ${nodeType}`,
+          content: nodeType === 'message' ? 'Hello! How can I help you?' :
+                   nodeType === 'start' ? '' : ''
         }
       }
 
@@ -715,26 +759,59 @@ const BotBuilder = () => {
     }
   }
 
-  const handleTest = () => {
+  const handleTest = async () => {
     if (!bot || !bot.flow.nodes.length) {
       toast.error('Add some nodes to test the flow')
       return
     }
-    
-    setShowTestPanel(true)
-    setTestMessages([])
-    setTestSessionId(`test-${Date.now()}`)
-    
-    // Add welcome message
-    const welcomeMessage = bot.settings?.appearance?.welcomeMessage || 'Hello! How can I help you?'
-    setTestMessages([{
-      id: 'welcome',
-      content: welcomeMessage,
-      sender: 'bot',
-      timestamp: new Date()
-    }])
-    
-    toast.success('Test mode activated!')
+
+    // Validate flow before testing
+    setIsTestingFlow(true)
+    try {
+      // Test with a dummy message to validate the flow
+      await botsAPI.testBot(bot.id, 'test', `validation-${Date.now()}`)
+
+      // If validation passes, show test panel
+      setShowTestPanel(true)
+      setTestMessages([])
+      setTestSessionId(`test-${Date.now()}`)
+
+      // Add first flow message
+      const firstFlowMessage = getFirstFlowMessage()
+      const welcomeMessage = firstFlowMessage || bot.settings?.appearance?.welcomeMessage || 'Hello! How can I help you?'
+      setTestMessages([{
+        id: 'welcome',
+        content: welcomeMessage,
+        sender: 'bot',
+        timestamp: new Date()
+      }])
+
+      setIsTestingFlow(false)
+      toast.success('Test mode activated!')
+    } catch (error: any) {
+      setIsTestingFlow(false)
+      console.error('Flow validation error:', error)
+
+      // Handle validation errors specifically
+      if (error.response?.status === 400 && error.response?.data?.validationErrors) {
+        const validationErrors = error.response.data.validationErrors
+
+        // Create detailed error message
+        const errorDetails = validationErrors.map((err: any) =>
+          `• ${err.message}${err.nodeName ? ` (${err.nodeName})` : ''}`
+        ).join('\n')
+
+        toast.error(`Flow validation failed:\n${errorDetails}`, {
+          duration: 6000,
+          style: {
+            whiteSpace: 'pre-line',
+            maxWidth: '500px'
+          }
+        })
+      } else {
+        toast.error(error.response?.data?.details || 'Failed to validate flow. Please check your bot configuration.')
+      }
+    }
   }
 
   const handleZoomIn = () => {
@@ -863,43 +940,54 @@ const BotBuilder = () => {
   // Test functionality
   const sendTestMessage = async () => {
     if (!testInput.trim() || !bot || !testSessionId) return
-    
+
     const userMessage = {
       id: `msg-${Date.now()}`,
       content: testInput.trim(),
       sender: 'user' as const,
       timestamp: new Date()
     }
-    
+
     setTestMessages(prev => [...prev, userMessage])
     setTestInput('')
     setIsTestingFlow(true)
-    
+
     try {
       // Call the test API
       const response = await botsAPI.testBot(bot.id, userMessage.content, testSessionId)
-      
+
       const botMessage = {
         id: `msg-${Date.now()}-bot`,
-        content: response.data?.response?.content || 'No response received',
+        content: response.data?.response || 'No response received',
         sender: 'bot' as const,
         timestamp: new Date()
       }
-      
+
       setTimeout(() => {
         setTestMessages(prev => [...prev, botMessage])
         setIsTestingFlow(false)
       }, 1000)
-      
-    } catch (error) {
-      console.error('Test error:', error)
+
+    } catch (error: any) {
+      console.error('Test message error:', error)
+
+      let errorContent = 'Sorry, there was an error processing your message.'
+
+      // Handle validation errors specifically
+      if (error.response?.status === 400 && error.response?.data?.validationErrors) {
+        const validationErrors = error.response.data.validationErrors
+        errorContent = `Flow validation failed:\n\n${validationErrors.map((err: any) => `• ${err.message}${err.nodeName ? ` (${err.nodeName})` : ''}`).join('\n')}`
+      } else if (error.response?.data?.details) {
+        errorContent = error.response.data.details
+      }
+
       const errorMessage = {
         id: `msg-${Date.now()}-error`,
-        content: 'Sorry, I encountered an error while processing your message.',
+        content: errorContent,
         sender: 'bot' as const,
         timestamp: new Date()
       }
-      
+
       setTimeout(() => {
         setTestMessages(prev => [...prev, errorMessage])
         setIsTestingFlow(false)
@@ -907,16 +995,79 @@ const BotBuilder = () => {
     }
   }
 
-  // Mouse move handler for connection dragging
+  // Mouse move handler for connection dragging and node dragging
   const handleMouseMove = useCallback((event: React.MouseEvent) => {
-    if (connectingFrom && canvasRef.current) {
-      const rect = canvasRef.current.getBoundingClientRect()
+    if (!canvasRef.current) return
+
+    const rect = canvasRef.current.getBoundingClientRect()
+    const mouseX = (event.clientX - rect.left) / builderState.zoom
+    const mouseY = (event.clientY - rect.top) / builderState.zoom
+
+    // Handle connection dragging
+    if (connectingFrom) {
       setDraggedConnection({
-        x: event.clientX - rect.left,
-        y: event.clientY - rect.top
+        x: mouseX,
+        y: mouseY
       })
     }
-  }, [connectingFrom])
+
+    // Handle node dragging
+    if (draggingNode && bot) {
+      const newX = mouseX - draggingNode.offset.x
+      const newY = mouseY - draggingNode.offset.y
+
+      // Update node position
+      const updatedFlow = {
+        ...bot.flow,
+        nodes: bot.flow.nodes.map(node =>
+          node.id === draggingNode.nodeId
+            ? { ...node, position: { x: Math.max(0, newX), y: Math.max(0, newY) } }
+            : node
+        )
+      }
+
+      dispatch(updateBotFlow({ botId: bot.id, flow: updatedFlow }))
+    }
+  }, [connectingFrom, draggingNode, bot, builderState.zoom, dispatch])
+
+  // Handle node drag start
+  const handleNodeDragStart = useCallback((nodeId: string, event: React.MouseEvent) => {
+    event.stopPropagation()
+
+    if (!canvasRef.current) return
+
+    const rect = canvasRef.current.getBoundingClientRect()
+    const mouseX = (event.clientX - rect.left) / builderState.zoom
+    const mouseY = (event.clientY - rect.top) / builderState.zoom
+
+    const node = bot?.flow.nodes.find(n => n.id === nodeId)
+    if (!node) return
+
+    const offset = {
+      x: mouseX - node.position.x,
+      y: mouseY - node.position.y
+    }
+
+    setDraggingNode({ nodeId, offset })
+    setSelectedNode(nodeId)
+  }, [bot, builderState.zoom])
+
+  // Handle mouse up to stop dragging
+  const handleMouseUp = useCallback(() => {
+    setDraggingNode(null)
+  }, [])
+
+  // Add global mouse up listener
+  useEffect(() => {
+    const handleGlobalMouseUp = () => {
+      setDraggingNode(null)
+    }
+
+    document.addEventListener('mouseup', handleGlobalMouseUp)
+    return () => {
+      document.removeEventListener('mouseup', handleGlobalMouseUp)
+    }
+  }, [])
 
   // Render connections
   const renderConnections = () => {
@@ -1116,9 +1267,11 @@ const BotBuilder = () => {
             onDrop={handleCanvasDrop}
             onDragOver={handleCanvasDragOver}
             onMouseMove={handleMouseMove}
+            onMouseUp={handleMouseUp}
             onClick={() => {
               setConnectingFrom(null)
               setDraggedConnection(null)
+              setSelectedNode(null)
             }}
             style={{ transform: `scale(${builderState.zoom})`, transformOrigin: 'top left' }}
           >
@@ -1135,16 +1288,21 @@ const BotBuilder = () => {
               return (
                 <div
                   key={node.id}
-                  className={`absolute w-40 p-3 rounded-xl border-2 cursor-pointer transition-all ${
-                    isSelected 
-                      ? 'border-primary-500 shadow-lg bg-white dark:bg-slate-800' 
+                  className={`absolute w-40 p-3 rounded-xl border-2 cursor-pointer transition-all select-none ${
+                    isSelected
+                      ? 'border-primary-500 shadow-lg bg-white dark:bg-slate-800'
                       : 'border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 hover:border-primary-300'
-                  }`}
+                  } ${draggingNode?.nodeId === node.id ? 'cursor-grabbing' : 'cursor-grab'}`}
                   style={{
                     left: node.position.x,
-                    top: node.position.y
+                    top: node.position.y,
+                    zIndex: draggingNode?.nodeId === node.id ? 10 : 2
                   }}
-                  onClick={() => handleNodeSelect(node.id)}
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    handleNodeSelect(node.id)
+                  }}
+                  onMouseDown={(e) => handleNodeDragStart(node.id, e)}
                 >
                   <div className="flex items-center space-x-2 mb-2">
                     <div className={`p-1 rounded-lg ${getNodeColor(node.type)}`}>
@@ -1168,6 +1326,7 @@ const BotBuilder = () => {
                           e.stopPropagation()
                           // Handle copy
                         }}
+                        onMouseDown={(e) => e.stopPropagation()}
                         className="w-6 h-6 bg-primary-500 text-white rounded-full flex items-center justify-center hover:bg-primary-600"
                       >
                         <Copy className="w-3 h-3" />
@@ -1177,6 +1336,7 @@ const BotBuilder = () => {
                           e.stopPropagation()
                           handleNodeDelete(node.id)
                         }}
+                        onMouseDown={(e) => e.stopPropagation()}
                         className="w-6 h-6 bg-red-500 text-white rounded-full flex items-center justify-center hover:bg-red-600"
                       >
                         <Trash2 className="w-3 h-3" />
@@ -1185,18 +1345,26 @@ const BotBuilder = () => {
                   )}
 
                   {/* Connection Points */}
-                  <div 
-                    className={`absolute -right-2 top-1/2 w-4 h-4 rounded-full border-2 border-white transform -translate-y-1/2 cursor-pointer z-10 ${
+                  <div
+                    className={`absolute -right-2 top-1/2 w-4 h-4 rounded-full border-2 border-white transform -translate-y-1/2 cursor-pointer z-20 ${
                       connectingFrom === node.id ? 'bg-green-500' : 'bg-primary-500 hover:bg-primary-600'
                     }`}
-                    onClick={(e) => handleStartConnection(node.id, e)}
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      handleStartConnection(node.id, e)
+                    }}
+                    onMouseDown={(e) => e.stopPropagation()}
                     title="Click to start connection"
                   ></div>
-                  <div 
-                    className={`absolute -left-2 top-1/2 w-4 h-4 rounded-full border-2 border-white transform -translate-y-1/2 cursor-pointer z-10 ${
+                  <div
+                    className={`absolute -left-2 top-1/2 w-4 h-4 rounded-full border-2 border-white transform -translate-y-1/2 cursor-pointer z-20 ${
                       connectingFrom && connectingFrom !== node.id ? 'bg-green-500 hover:bg-green-600' : 'bg-slate-400'
                     }`}
-                    onClick={(e) => connectingFrom ? handleEndConnection(node.id, e) : undefined}
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      if (connectingFrom) handleEndConnection(node.id, e)
+                    }}
+                    onMouseDown={(e) => e.stopPropagation()}
                     title={connectingFrom ? 'Click to complete connection' : 'Input connection point'}
                   ></div>
                 </div>
@@ -1283,6 +1451,12 @@ const BotBuilder = () => {
                   className="input-field"
                 />
               </div>
+
+              {selectedNodeData.type === 'start' && (
+                <div className="text-sm text-slate-600 dark:text-slate-400 p-3 bg-slate-50 dark:bg-slate-700 rounded-lg">
+                  <p>This is the entry point for your bot conversation. Connect it to a message node to start the flow.</p>
+                </div>
+              )}
 
               {(selectedNodeData.type === 'message' || selectedNodeData.type === 'question') && (
                 <div>
@@ -2514,7 +2688,8 @@ const BotBuilder = () => {
                   onClick={() => {
                     setTestMessages([])
                     setTestSessionId(`test-${Date.now()}`)
-                    const welcomeMessage = bot?.settings?.appearance?.welcomeMessage || 'Hello! How can I help you?'
+                    const firstFlowMessage = getFirstFlowMessage()
+                    const welcomeMessage = firstFlowMessage || bot?.settings?.appearance?.welcomeMessage || 'Hello! How can I help you?'
                     setTestMessages([{
                       id: 'welcome-new',
                       content: welcomeMessage,
@@ -2590,20 +2765,9 @@ const BotBuilder = () => {
                 </button>
               </div>
               
-              {bot && bot.flow.nodes.length === 0 && (
-                <div className="mt-3 p-2 bg-yellow-50 dark:bg-yellow-900/20 rounded-lg">
-                  <p className="text-xs text-yellow-700 dark:text-yellow-300">
-                    ⚠️ Add nodes to your flow to test the conversation
-                  </p>
-                </div>
-              )}
-              
-              {bot && bot.flow.nodes.length > 0 && bot.flow.connections.length === 0 && (
-                <div className="mt-3 p-2 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
-                  <p className="text-xs text-blue-700 dark:text-blue-300">
-                    💡 Connect your nodes to create a conversation flow
-                  </p>
-                </div>
+              {/* Flow Validation Warnings */}
+              {bot && (
+                <FlowValidationWarnings bot={bot} />
               )}
             </div>
           </div>
@@ -2626,6 +2790,144 @@ const BotBuilder = () => {
           overflow: hidden;
         }
       `}</style>
+    </div>
+  )
+}
+
+// Flow Validation Warnings Component
+const FlowValidationWarnings: React.FC<{ bot: any }> = ({ bot }) => {
+  const getValidationIssues = () => {
+    const issues: Array<{ type: 'error' | 'warning' | 'info', message: string, action?: string }> = []
+
+    if (!bot || !bot.flow) return issues
+
+    const { nodes, connections } = bot.flow
+
+    // No nodes
+    if (nodes.length === 0) {
+      issues.push({
+        type: 'error',
+        message: 'Add nodes to your flow to test the conversation',
+        action: 'Drag nodes from the left panel'
+      })
+      return issues // Return early since other checks don't apply
+    }
+
+    // Check for start node
+    const hasStartNode = nodes.some((node: any) => node.type === 'start')
+    if (!hasStartNode) {
+      issues.push({
+        type: 'warning',
+        message: 'No start node found - add a start node for proper flow execution'
+      })
+    }
+
+    // No connections with multiple nodes
+    if (nodes.length > 1 && connections.length === 0) {
+      issues.push({
+        type: 'warning',
+        message: 'Connect your nodes to create a conversation flow',
+        action: 'Click and drag between node connection points'
+      })
+    }
+
+    // Check for unconfigured nodes
+    const unconfiguredNodes = nodes.filter((node: any) => {
+      if (node.type === 'message' && (!node.data?.content || node.data.content.trim() === '')) {
+        return true
+      }
+      if ((node.type === 'quick_replies' || node.type === 'quick-replies' || node.type === 'quickreplies') &&
+          (!node.data?.options || node.data.options.length === 0)) {
+        return true
+      }
+      if (node.type === 'input' && !node.data?.inputType) {
+        return true
+      }
+      if (node.type === 'condition' && (!node.data?.conditions || node.data.conditions.length === 0)) {
+        return true
+      }
+      if (node.type === 'action' && !node.data?.actionType) {
+        return true
+      }
+      if (node.type === 'api' && (!node.data?.url || !node.data?.method)) {
+        return true
+      }
+      return false
+    })
+
+    if (unconfiguredNodes.length > 0) {
+      issues.push({
+        type: 'error',
+        message: `${unconfiguredNodes.length} node(s) need configuration`,
+        action: 'Click on nodes to configure them'
+      })
+    }
+
+    // Check for isolated nodes
+    if (connections.length > 0 && nodes.length > 1) {
+      const connectedNodeIds = new Set()
+      connections.forEach((conn: any) => {
+        connectedNodeIds.add(conn.source)
+        connectedNodeIds.add(conn.target)
+      })
+
+      const isolatedNodes = nodes.filter((node: any) =>
+        node.type !== 'start' && !connectedNodeIds.has(node.id)
+      )
+
+      if (isolatedNodes.length > 0) {
+        issues.push({
+          type: 'warning',
+          message: `${isolatedNodes.length} isolated node(s) not connected to the flow`
+        })
+      }
+    }
+
+    return issues
+  }
+
+  const issues = getValidationIssues()
+
+  if (issues.length === 0) {
+    return (
+      <div className="mt-3 p-2 bg-green-50 dark:bg-green-900/20 rounded-lg">
+        <p className="text-xs text-green-700 dark:text-green-300">
+          ✅ Flow is ready for testing
+        </p>
+      </div>
+    )
+  }
+
+  return (
+    <div className="mt-3 space-y-2">
+      {issues.map((issue, index) => {
+        const bgColor = issue.type === 'error'
+          ? 'bg-red-50 dark:bg-red-900/20'
+          : issue.type === 'warning'
+          ? 'bg-yellow-50 dark:bg-yellow-900/20'
+          : 'bg-blue-50 dark:bg-blue-900/20'
+
+        const textColor = issue.type === 'error'
+          ? 'text-red-700 dark:text-red-300'
+          : issue.type === 'warning'
+          ? 'text-yellow-700 dark:text-yellow-300'
+          : 'text-blue-700 dark:text-blue-300'
+
+        const icon = issue.type === 'error' ? '❌' : issue.type === 'warning' ? '⚠️' : '💡'
+
+        return (
+          <div key={index} className={`p-2 ${bgColor} rounded-lg`}>
+            <p className={`text-xs ${textColor}`}>
+              {icon} {issue.message}
+            </p>
+            {issue.action && (
+              <p className={`text-xs ${textColor} mt-1 opacity-75`}>
+                💡 {issue.action}
+              </p>
+            )}
+          </div>
+        )
+      })}
     </div>
   )
 }

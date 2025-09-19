@@ -12,22 +12,27 @@ import {
   setSearchQuery,
   clearSearchResults
 } from '../../store/slices/vectorStoreSlice'
-import { knowledgeBaseAPI, ragAPI } from '../../services/api'
+import { knowledgeBaseAPI, ragAPI, webScrapingAPI } from '../../services/api'
 import { useDropzone } from 'react-dropzone'
-import { 
-  Upload, 
-  FileText, 
-  Trash2, 
-  RefreshCw, 
-  CheckCircle, 
-  AlertCircle, 
+import {
+  Upload,
+  FileText,
+  Trash2,
+  RefreshCw,
+  CheckCircle,
+  AlertCircle,
   Clock,
   Loader2,
   Search,
   Database,
   Zap,
   Brain,
-  Settings
+  Settings,
+  Globe,
+  Link,
+  Trash,
+  Play,
+  Plus
 } from 'lucide-react'
 import { format } from 'date-fns'
 import toast from 'react-hot-toast'
@@ -45,16 +50,29 @@ const KnowledgeBase = () => {
   const { settings } = useSelector((state: RootState) => state.settings)
   
   const [uploading, setUploading] = useState(false)
-  const [activeTab, setActiveTab] = useState<'documents' | 'search' | 'embeddings'>('documents')
+  const [activeTab, setActiveTab] = useState<'documents' | 'search' | 'embeddings' | 'webscraping'>('documents')
   const [searchInput, setSearchInput] = useState('')
 
-  // Load existing documents on component mount
+  // Web scraping state
+  const [urlForm, setUrlForm] = useState({ url: '', name: '', description: '' })
+  const [scrapingStatus, setScrapingStatus] = useState<Record<string, 'idle' | 'scraping' | 'success' | 'error'>>({})
+  const [webScrapingData, setWebScrapingData] = useState<any>({
+    enabled: false,
+    urls: [],
+    cacheTimeout: 86400000,
+    requestTimeout: 30000,
+    maxUrls: 10,
+    maxContentLength: 100000
+  })
+
+  // Load existing documents and web scraping data on component mount
   useEffect(() => {
-    const loadDocuments = async () => {
+    const loadData = async () => {
       try {
-        const response = await knowledgeBaseAPI.getDocuments()
-        const docs = response.data.documents || []
-        
+        // Load documents
+        const documentsResponse = await knowledgeBaseAPI.getDocuments()
+        const docs = documentsResponse.data.documents || []
+
         // Transform backend documents to frontend format
         const transformedDocs = docs.map((doc: any) => ({
           id: doc.id,
@@ -65,16 +83,37 @@ const KnowledgeBase = () => {
           status: doc.status || 'indexed',
           indexedAt: doc.indexedAt ? new Date(doc.indexedAt) : undefined
         }))
-        
+
         // Set all documents at once (more efficient)
         dispatch(setDocuments(transformedDocs))
+
+        // Load web scraping data
+        try {
+          const webScrapingResponse = await webScrapingAPI.getSettings()
+          const webScrapingSettings = webScrapingResponse.data?.data?.webScraping || {}
+
+          console.log('🌐 Loaded web scraping data:', webScrapingSettings)
+
+          setWebScrapingData({
+            enabled: webScrapingSettings.enabled || false,
+            urls: webScrapingSettings.urls || [],
+            cacheTimeout: webScrapingSettings.cacheTimeout || 86400000,
+            requestTimeout: webScrapingSettings.requestTimeout || 30000,
+            maxUrls: webScrapingSettings.maxUrls || 10,
+            maxContentLength: webScrapingSettings.maxContentLength || 100000
+          })
+        } catch (webError) {
+          console.error('Failed to load web scraping data:', webError)
+          // Don't show error toast for web scraping data, just use defaults
+        }
+
       } catch (error) {
         console.error('Failed to load documents:', error)
         toast.error('Failed to load existing documents')
       }
     }
 
-    loadDocuments()
+    loadData()
   }, [dispatch])
 
   const onDrop = useCallback(async (acceptedFiles: File[]) => {
@@ -307,6 +346,79 @@ const KnowledgeBase = () => {
     }
   }
 
+  // Web scraping functions
+  const handleAddUrl = async () => {
+    if (!urlForm.url.trim() || !urlForm.name.trim()) {
+      toast.error('Please fill in URL and name')
+      return
+    }
+
+    try {
+      console.log('🔗 Adding URL to backend...', urlForm)
+
+      const response = await webScrapingAPI.addUrl(urlForm.url, urlForm.name, urlForm.description)
+      const newUrl = response.data.urlEntry
+
+      console.log('✅ URL added to backend:', newUrl)
+
+      // Update local state
+      setWebScrapingData(prev => ({
+        ...prev,
+        urls: [...prev.urls, newUrl]
+      }))
+
+      setUrlForm({ url: '', name: '', description: '' })
+      toast.success('URL added successfully')
+    } catch (error) {
+      console.error('❌ Failed to add URL:', error)
+      toast.error('Failed to add URL')
+    }
+  }
+
+  const handleRemoveUrl = async (urlId: string) => {
+    try {
+      console.log('🗑️ Removing URL from backend...', urlId)
+
+      await webScrapingAPI.removeUrl(urlId)
+
+      console.log('✅ URL removed from backend')
+
+      // Update local state
+      setWebScrapingData(prev => ({
+        ...prev,
+        urls: prev.urls.filter(url => url.id !== urlId)
+      }))
+
+      toast.success('URL removed successfully')
+    } catch (error) {
+      console.error('❌ Failed to remove URL:', error)
+      toast.error('Failed to remove URL')
+    }
+  }
+
+  const handleScrapeUrl = async (urlId: string) => {
+    setScrapingStatus(prev => ({ ...prev, [urlId]: 'scraping' }))
+
+    try {
+      console.log('🌐 Scraping URL...', urlId)
+
+      const response = await webScrapingAPI.scrapeUrl(urlId)
+      const result = response.data?.data || response.data
+
+      if (result?.success !== false) {
+        setScrapingStatus(prev => ({ ...prev, [urlId]: 'success' }))
+        toast.success('URL scraped successfully')
+      } else {
+        setScrapingStatus(prev => ({ ...prev, [urlId]: 'error' }))
+        toast.error(result?.message || 'Scraping failed')
+      }
+    } catch (error) {
+      console.error('❌ Scraping failed:', error)
+      setScrapingStatus(prev => ({ ...prev, [urlId]: 'error' }))
+      toast.error('Failed to scrape URL')
+    }
+  }
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -352,7 +464,8 @@ const KnowledgeBase = () => {
           {[
             { id: 'documents', label: 'Documents', icon: FileText },
             { id: 'search', label: 'Search', icon: Search, disabled: !settings.ollama?.ragEnabled },
-            { id: 'embeddings', label: 'Embeddings', icon: Database, disabled: !settings.ollama?.ragEnabled }
+            { id: 'embeddings', label: 'Embeddings', icon: Database, disabled: !settings.ollama?.ragEnabled },
+            { id: 'webscraping', label: 'Web Scraping', icon: Globe }
           ].map((tab) => (
             <button
               key={tab.id}
@@ -727,6 +840,199 @@ const KnowledgeBase = () => {
                 ))}
               </div>
             )}
+          </div>
+        </>
+      )}
+
+      {/* Web Scraping Tab */}
+      {activeTab === 'webscraping' && (
+        <>
+          <div className="card p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+                <Globe className="w-5 h-5 inline mr-2" />
+                Web Scraping Configuration
+              </h3>
+              <div className="flex items-center space-x-2">
+                <input
+                  type="checkbox"
+                  id="webScrapingEnabled"
+                  checked={webScrapingData.enabled}
+                  onChange={(e) => {
+                    setWebScrapingData(prev => ({
+                      ...prev,
+                      enabled: e.target.checked
+                    }))
+                    console.log('Web scraping enabled:', e.target.checked)
+                  }}
+                  className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                />
+                <label htmlFor="webScrapingEnabled" className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                  Enable Web Scraping
+                </label>
+              </div>
+            </div>
+
+            {/* Add New URL */}
+            <div className="border border-gray-200 dark:border-gray-700 rounded-lg p-4 bg-gray-50 dark:bg-gray-800 mb-6">
+              <h4 className="text-md font-medium text-gray-900 dark:text-white mb-3">Add New URL</h4>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
+                <div>
+                  <input
+                    type="url"
+                    placeholder="Website URL"
+                    value={urlForm.url}
+                    onChange={(e) => setUrlForm({ ...urlForm, url: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500 dark:bg-gray-700 dark:text-white"
+                  />
+                </div>
+                <div>
+                  <input
+                    type="text"
+                    placeholder="Display Name"
+                    value={urlForm.name}
+                    onChange={(e) => setUrlForm({ ...urlForm, name: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500 dark:bg-gray-700 dark:text-white"
+                  />
+                </div>
+                <div>
+                  <input
+                    type="text"
+                    placeholder="Description (optional)"
+                    value={urlForm.description}
+                    onChange={(e) => setUrlForm({ ...urlForm, description: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500 dark:bg-gray-700 dark:text-white"
+                  />
+                </div>
+                <div>
+                  <button
+                    onClick={handleAddUrl}
+                    className="w-full px-4 py-2 bg-primary-600 text-white rounded-md hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-primary-500 transition-colors flex items-center justify-center space-x-2"
+                  >
+                    <Plus className="w-4 h-4" />
+                    <span>Add URL</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* URL List */}
+            {webScrapingData.urls && webScrapingData.urls.length > 0 && (
+              <div>
+                <h4 className="text-md font-medium text-gray-900 dark:text-white mb-3">Configured URLs</h4>
+                <div className="space-y-2">
+                  {webScrapingData.urls.map((urlItem: any) => (
+                    <div key={urlItem.id} className="flex items-center justify-between p-3 border border-gray-200 dark:border-gray-700 rounded-lg">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center space-x-2">
+                          <Link className="w-4 h-4 text-primary-600" />
+                          <p className="text-sm font-medium text-gray-900 dark:text-white truncate">
+                            {urlItem.name}
+                          </p>
+                          {urlItem.description && (
+                            <span className="text-xs text-gray-500 dark:text-gray-400">
+                              - {urlItem.description}
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-xs text-gray-500 dark:text-gray-400 truncate mt-1">
+                          {urlItem.url}
+                        </p>
+                        {urlItem.lastScraped && (
+                          <p className="text-xs text-gray-400 dark:text-gray-500">
+                            Last scraped: {new Date(urlItem.lastScraped).toLocaleDateString()}
+                          </p>
+                        )}
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <button
+                          onClick={() => handleScrapeUrl(urlItem.id)}
+                          disabled={scrapingStatus[urlItem.id] === 'scraping'}
+                          className="p-2 text-green-600 hover:text-green-700 disabled:opacity-50 transition-colors"
+                          title="Scrape URL"
+                        >
+                          {scrapingStatus[urlItem.id] === 'scraping' ? (
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                          ) : (
+                            <Play className="w-4 h-4" />
+                          )}
+                        </button>
+                        <button
+                          onClick={() => handleRemoveUrl(urlItem.id)}
+                          className="p-2 text-red-600 hover:text-red-700 transition-colors"
+                          title="Remove URL"
+                        >
+                          <Trash className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Configuration Settings */}
+            <div className="mt-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Cache Timeout (hours)
+                </label>
+                <input
+                  type="number"
+                  value={webScrapingData.cacheTimeout / 3600000}
+                  readOnly
+                  min="1"
+                  max="168"
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-gray-100 dark:bg-gray-600 dark:text-gray-300"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Request Timeout (seconds)
+                </label>
+                <input
+                  type="number"
+                  value={webScrapingData.requestTimeout / 1000}
+                  readOnly
+                  min="5"
+                  max="60"
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-gray-100 dark:bg-gray-600 dark:text-gray-300"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Max URLs
+                </label>
+                <input
+                  type="number"
+                  value={webScrapingData.maxUrls}
+                  readOnly
+                  min="1"
+                  max="50"
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-gray-100 dark:bg-gray-600 dark:text-gray-300"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Max Content Length (KB)
+                </label>
+                <input
+                  type="number"
+                  value={webScrapingData.maxContentLength / 1000}
+                  readOnly
+                  min="50"
+                  max="1000"
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-gray-100 dark:bg-gray-600 dark:text-gray-300"
+                />
+              </div>
+            </div>
+
+            <div className="mt-4 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
+              <p className="text-sm text-blue-800 dark:text-blue-200">
+                <strong>Note:</strong> Web scraping allows your chatbot to use fresh content from websites as part of its knowledge base.
+                Scraped content is automatically included in AI responses when relevant to user queries.
+              </p>
+            </div>
           </div>
         </>
       )}

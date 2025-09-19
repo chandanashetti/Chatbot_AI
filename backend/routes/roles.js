@@ -288,13 +288,13 @@ router.put('/:id', ensureUser, requirePermission('roles.edit'), async (req, res)
       });
     }
     
-    // Prevent updating system roles
-    if (role.type === 'system') {
+    // Prevent updating system roles (except for Super Administrators)
+    if (role.type === 'system' && req.user.role !== 'superadministrator') {
       return res.status(403).json({
         success: false,
         error: {
           code: 'CANNOT_UPDATE_SYSTEM_ROLE',
-          message: 'System roles cannot be modified'
+          message: 'System roles can only be modified by Super Administrators'
         }
       });
     }
@@ -319,11 +319,20 @@ router.put('/:id', ensureUser, requirePermission('roles.edit'), async (req, res)
     }
     
     // Update role
-    Object.assign(role, {
+    const updateData = {
       ...req.body,
-      updatedBy: req.user.id,
-      type: 'custom' // Ensure custom roles stay custom
-    });
+      updatedBy: req.user.id
+    };
+    
+    // Only preserve type for custom roles, allow Super Administrators to modify system roles
+    if (role.type === 'custom') {
+      updateData.type = 'custom'; // Ensure custom roles stay custom
+    } else if (role.type === 'system' && req.user.role === 'superadministrator') {
+      // Super Administrators can modify system roles but preserve their system type
+      updateData.type = 'system';
+    }
+    
+    Object.assign(role, updateData);
     
     await role.save();
     await role.populate(['createdBy', 'updatedBy'], 'profile.firstName profile.lastName email');
@@ -378,13 +387,13 @@ router.delete('/:id', ensureUser, requirePermission('roles.delete'), async (req,
       });
     }
     
-    // Prevent deleting system roles
-    if (role.type === 'system') {
+    // Prevent deleting system roles (except for Super Administrators)
+    if (role.type === 'system' && req.user.role !== 'superadministrator') {
       return res.status(403).json({
         success: false,
         error: {
           code: 'CANNOT_DELETE_SYSTEM_ROLE',
-          message: 'System roles cannot be deleted'
+          message: 'System roles can only be deleted by Super Administrators'
         }
       });
     }
@@ -457,13 +466,13 @@ router.patch('/:id/status', ensureUser, async (req, res) => {
       });
     }
     
-    // Prevent deactivating system roles
-    if (role.type === 'system' && status === 'inactive') {
+    // Prevent deactivating system roles (except for Super Administrators)
+    if (role.type === 'system' && status === 'inactive' && req.user.role !== 'superadministrator') {
       return res.status(403).json({
         success: false,
         error: {
           code: 'CANNOT_DEACTIVATE_SYSTEM_ROLE',
-          message: 'System roles cannot be deactivated'
+          message: 'System roles can only be deactivated by Super Administrators'
         }
       });
     }

@@ -1,11 +1,11 @@
 import { useState, useEffect } from 'react'
 import { useSelector, useDispatch } from 'react-redux'
 import { RootState } from '../../store/store'
-import { updateSettings, setSaving, BotSettings, OllamaSettings, OpenAISettings, WebScrapingSettings } from '../../store/slices/settingsSlice'
-import { settingsAPI, openaiAPI, webScrapingAPI } from '../../services/api'
-import { 
-  Save, 
-  Bot, 
+import { updateSettings, setSaving, BotSettings, OllamaSettings, OpenAISettings } from '../../store/slices/settingsSlice'
+import { settingsAPI, openaiAPI } from '../../services/api'
+import {
+  Save,
+  Bot,
   Loader2,
   Server,
   Database,
@@ -13,11 +13,11 @@ import {
   XCircle,
   AlertTriangle,
   Brain,
-  Globe,
+  Mail,
   Plus,
   Trash2,
-  RefreshCw,
-  ExternalLink
+  Eye,
+  EyeOff
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 
@@ -71,54 +71,32 @@ const AdminSettings = () => {
   // Load initial data from backend on component mount
   useEffect(() => {
     let hasLoaded = false
-    
+
     const loadSettingsFromBackend = async () => {
       if (hasLoaded) return // Prevent multiple loads
       hasLoaded = true
-      
+
       try {
         console.log('📡 Loading settings from backend...')
-        
+
         // Load general settings
         const generalResponse = await settingsAPI.getSettings()
         const backendSettings = generalResponse.data || {}
-        
-        console.log('📊 General settings loaded:', backendSettings)
-        
-        // Load web scraping settings separately
-        const webScrapingResponse = await webScrapingAPI.getSettings()
-        const webScrapingData = webScrapingResponse.data?.data?.webScraping || {}
 
-        console.log('🌐 Web scraping settings loaded:', webScrapingData.urls?.length || 0, 'URLs')
-        
-        // Merge all settings with proper defaults
-        const mergedSettings = {
-          ...settings, // Use Redux defaults as base
-          ...backendSettings, // Override with backend data
-          webScraping: {
-            ...settings.webScraping, // Use Redux defaults for web scraping
-            ...webScrapingData, // Override with backend web scraping data
-            // Ensure URLs from backend take priority
-            urls: webScrapingData.urls || settings.webScraping.urls || []
-          }
-        }
-        
-        console.log('🔄 Merged settings:', mergedSettings)
-        
+        console.log('📊 General settings loaded:', backendSettings)
+
         // Update both local state and Redux (only if different from current)
         const settingsString = JSON.stringify(settings)
-        const mergedString = JSON.stringify(mergedSettings)
-        
+        const mergedString = JSON.stringify(backendSettings)
+
         if (settingsString !== mergedString) {
-          setLocalSettings(mergedSettings)
-          dispatch(updateSettings(mergedSettings))
+          setLocalSettings(backendSettings)
+          dispatch(updateSettings(backendSettings))
           console.log('✅ Settings synchronized successfully')
-          console.log('🔗 URLs in localSettings after sync:', mergedSettings.webScraping.urls.length)
         } else {
           console.log('ℹ️ Settings already up to date')
-          console.log('🔗 URLs in current settings:', settings.webScraping.urls.length)
         }
-        
+
       } catch (error) {
         console.error('❌ Failed to load settings from backend:', error)
         toast.error('Failed to load settings from server')
@@ -182,157 +160,6 @@ const AdminSettings = () => {
     }
   }
 
-  const handleWebScrapingChange = (field: keyof WebScrapingSettings, value: any) => {
-    setLocalSettings((prev: BotSettings) => ({
-      ...prev,
-      webScraping: {
-        ...prev.webScraping,
-        [field]: value
-      }
-    }))
-  }
-
-  const [urlForm, setUrlForm] = useState({
-    url: '',
-    name: '',
-    description: ''
-  })
-
-  const [scrapingStatus, setScrapingStatus] = useState<{ [key: string]: 'idle' | 'scraping' | 'success' | 'error' }>({})
-
-  const handleAddUrl = async () => {
-    if (!urlForm.url || !urlForm.name) {
-      toast.error('URL and name are required')
-      return
-    }
-
-    try {
-      console.log('🔗 Adding URL to backend...', urlForm)
-      
-      const response = await webScrapingAPI.addUrl(urlForm.url, urlForm.name, urlForm.description)
-      const newUrl = response.data.urlEntry
-      
-      console.log('✅ URL added to backend:', newUrl)
-      
-      // Update local settings
-      const updatedSettings = {
-        ...localSettings,
-        webScraping: {
-          ...localSettings.webScraping,
-          urls: [...localSettings.webScraping.urls, newUrl]
-        }
-      }
-      
-      setLocalSettings(updatedSettings)
-      dispatch(updateSettings(updatedSettings))
-      
-      setUrlForm({ url: '', name: '', description: '' })
-      toast.success('URL added successfully')
-    } catch (error: any) {
-      console.error('❌ Failed to add URL:', error)
-
-      // Extract the specific error message from the backend response
-      let errorMessage = 'Failed to add URL'
-      if (error?.response?.data?.error?.message) {
-        errorMessage = error.response.data.error.message
-      } else if (error?.response?.data?.message) {
-        errorMessage = error.response.data.message
-      } else if (error?.message) {
-        errorMessage = error.message
-      }
-
-      toast.error(errorMessage)
-    }
-  }
-
-  const handleRemoveUrl = async (urlId: string) => {
-    try {
-      console.log('🗑️ Removing URL from backend...', urlId)
-      
-      await webScrapingAPI.removeUrl(urlId)
-      
-      console.log('✅ URL removed from backend')
-      
-      // Update local settings
-      const updatedSettings = {
-        ...localSettings,
-        webScraping: {
-          ...localSettings.webScraping,
-          urls: localSettings.webScraping.urls.filter(url => url.id !== urlId)
-        }
-      }
-      
-      setLocalSettings(updatedSettings)
-      dispatch(updateSettings(updatedSettings))
-      
-      toast.success('URL removed successfully')
-    } catch (error) {
-      console.error('❌ Failed to remove URL:', error)
-      toast.error('Failed to remove URL')
-    }
-  }
-
-  const handleScrapeUrl = async (urlId: string) => {
-    setScrapingStatus(prev => ({ ...prev, [urlId]: 'scraping' }))
-    
-    try {
-      console.log('🌐 Scraping URL...', urlId)
-      
-      const response = await webScrapingAPI.scrapeUrl(urlId)
-
-      console.log('📊 Full scraping response:', response.data)
-
-      // Handle different response structures
-      let result: any;
-      if (response.data.success === false && response.data.error) {
-        // Error response format: { success: false, error: { ... } }
-        result = {
-          status: 'error',
-          error: response.data.error.message || response.data.error.details || 'Unknown error'
-        }
-      } else if (response.data.data && response.data.data.result) {
-        // Success response format: { success: true, data: { result: { ... } } }
-        result = response.data.data.result
-      } else {
-        // Fallback: treat as error
-        result = {
-          status: 'error',
-          error: 'Invalid response format'
-        }
-      }
-
-      console.log('📊 Processed result:', result)
-
-      if (result.status === 'success') {
-        setScrapingStatus(prev => ({ ...prev, [urlId]: 'success' }))
-        
-        // Update the URL status in local settings
-        const updatedSettings = {
-          ...localSettings,
-          webScraping: {
-            ...localSettings.webScraping,
-            urls: localSettings.webScraping.urls.map(url => 
-              url.id === urlId 
-                ? { ...url, scrapingStatus: 'success' as const, lastScraped: new Date(), contentLength: result.contentLength }
-                : url
-            )
-          }
-        }
-        
-        setLocalSettings(updatedSettings)
-        dispatch(updateSettings(updatedSettings))
-        
-        toast.success('URL scraped successfully')
-      } else {
-        setScrapingStatus(prev => ({ ...prev, [urlId]: 'error' }))
-        toast.error(`Failed to scrape URL: ${result.error}`)
-      }
-    } catch (error) {
-      setScrapingStatus(prev => ({ ...prev, [urlId]: 'error' }))
-      console.error('❌ Failed to scrape URL:', error)
-      toast.error('Failed to scrape URL')
-    }
-  }
 
   const testOllamaConnection = async () => {
     setOllamaStatus('checking')
@@ -367,12 +194,11 @@ const AdminSettings = () => {
     dispatch(setSaving(true))
     try {
       console.log('💾 Saving settings to backend...', localSettings)
-      
-      // Save all settings (including web scraping) in one call
+
       const response = await settingsAPI.updateSettings(localSettings)
-      
+
       console.log('✅ Settings saved successfully:', response.data)
-      
+
       // Update Redux store with the response (which may have updated fields)
       if (response.data?.settings) {
         dispatch(updateSettings(response.data.settings))
@@ -380,7 +206,7 @@ const AdminSettings = () => {
       } else {
         dispatch(updateSettings(localSettings))
       }
-      
+
       toast.success('Settings saved successfully')
     } catch (error) {
       console.error('❌ Save error:', error)
@@ -883,225 +709,353 @@ const AdminSettings = () => {
 
       </div>
 
-      {/* Web Scraping Configuration */}
+      {/* Email Service Providers Configuration */}
       <div className="card p-6">
-        <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center justify-between mb-6">
           <div className="flex items-center space-x-2">
-            <Globe className="w-5 h-5 text-primary-600" />
+            <Mail className="w-5 h-5 text-primary-600" />
             <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
-              Web Scraping Configuration
+              Email Service Providers
             </h3>
           </div>
-          <div className="flex items-center space-x-2">
-            <input
-              type="checkbox"
-              id="webScrapingEnabled"
-              checked={localSettings.webScraping.enabled}
-              onChange={(e) => handleWebScrapingChange('enabled', e.target.checked)}
-              className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
-            />
-            <label htmlFor="webScrapingEnabled" className="text-sm font-medium text-gray-700 dark:text-gray-300">
-              Enable Web Scraping
-            </label>
-          </div>
+          <button className="btn-secondary text-sm px-3 py-2">
+            <Plus className="w-4 h-4 mr-2" />
+            Add Provider
+          </button>
         </div>
 
-        {localSettings.webScraping.enabled && (
-          <div className="space-y-6">
-            {/* Add New URL */}
-            <div className="border border-gray-200 dark:border-gray-700 rounded-lg p-4 bg-gray-50 dark:bg-gray-800">
-              <h4 className="text-md font-medium text-gray-900 dark:text-white mb-3">Add New URL</h4>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
-                <div>
-                  <input
-                    type="url"
-                    placeholder="https://example.com"
-                    value={urlForm.url}
-                    onChange={(e) => setUrlForm(prev => ({ ...prev, url: e.target.value }))}
-                    className="input-field text-sm"
-                  />
+        <p className="text-gray-600 dark:text-gray-400 mb-6">
+          Configure email service providers for bulk email campaigns. You can add multiple providers and choose which one to use for each campaign.
+        </p>
+
+        {/* Email Providers Grid */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* SendGrid Configuration */}
+          <div className="border border-gray-200 dark:border-gray-700 rounded-xl p-4">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center space-x-3">
+                <div className="w-10 h-10 bg-blue-100 dark:bg-blue-900/20 rounded-lg flex items-center justify-center">
+                  <Mail className="w-5 h-5 text-blue-600" />
                 </div>
                 <div>
-                  <input
-                    type="text"
-                    placeholder="Display name"
-                    value={urlForm.name}
-                    onChange={(e) => setUrlForm(prev => ({ ...prev, name: e.target.value }))}
-                    className="input-field text-sm"
-                  />
+                  <h4 className="font-medium text-gray-900 dark:text-white">SendGrid</h4>
+                  <p className="text-sm text-gray-500">Popular email delivery service</p>
                 </div>
-                <div>
+              </div>
+              <div className="flex items-center space-x-2">
+                <span className="px-2 py-1 bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 text-xs rounded-full">
+                  Not Configured
+                </span>
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  API Key
+                </label>
+                <div className="relative">
                   <input
-                    type="text"
-                    placeholder="Description (optional)"
-                    value={urlForm.description}
-                    onChange={(e) => setUrlForm(prev => ({ ...prev, description: e.target.value }))}
-                    className="input-field text-sm"
+                    type="password"
+                    placeholder="Enter SendGrid API key"
+                    className="input-field pr-10"
                   />
-                </div>
-                <div>
-                  <button
-                    onClick={handleAddUrl}
-                    className="btn-primary w-full text-sm flex items-center justify-center space-x-1"
-                  >
-                    <Plus className="w-4 h-4" />
-                    <span>Add URL</span>
+                  <button className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600">
+                    <Eye className="w-4 h-4" />
                   </button>
                 </div>
               </div>
-            </div>
 
-            {/* URL List */}
-            {localSettings.webScraping.urls.length > 0 && (
               <div>
-                <h4 className="text-md font-medium text-gray-900 dark:text-white mb-3">Configured URLs</h4>
-                <div className="space-y-2">
-                  {localSettings.webScraping.urls.map((urlItem) => (
-                    <div key={urlItem.id} className="flex items-center justify-between p-3 border border-gray-200 dark:border-gray-700 rounded-lg">
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center space-x-2">
-                          <p className="text-sm font-medium text-gray-900 dark:text-white truncate">
-                            {urlItem.name}
-                          </p>
-                          <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
-                            urlItem.scrapingStatus === 'success' ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200' :
-                            urlItem.scrapingStatus === 'error' ? 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200' :
-                            urlItem.scrapingStatus === 'pending' ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200' :
-                            'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-200'
-                          }`}>
-                            {urlItem.scrapingStatus}
-                          </span>
-                        </div>
-                        <div className="flex items-center space-x-4 mt-1">
-                          <p className="text-xs text-gray-500 dark:text-gray-400 truncate">
-                            {urlItem.url}
-                          </p>
-                          {urlItem.lastScraped && (
-                            <p className="text-xs text-gray-500 dark:text-gray-400">
-                              Last scraped: {new Date(urlItem.lastScraped).toLocaleDateString()}
-                            </p>
-                          )}
-                          {urlItem.contentLength > 0 && (
-                            <p className="text-xs text-gray-500 dark:text-gray-400">
-                              {(urlItem.contentLength / 1000).toFixed(1)}K chars
-                            </p>
-                          )}
-                        </div>
-                      </div>
-                      <div className="flex items-center space-x-2 ml-4">
-                        <a
-                          href={urlItem.url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="p-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
-                        >
-                          <ExternalLink className="w-4 h-4" />
-                        </a>
-                        <button
-                          onClick={() => handleScrapeUrl(urlItem.id)}
-                          disabled={scrapingStatus[urlItem.id] === 'scraping'}
-                          className="p-1 text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 disabled:opacity-50"
-                        >
-                          {scrapingStatus[urlItem.id] === 'scraping' ? (
-                            <Loader2 className="w-4 h-4 animate-spin" />
-                          ) : (
-                            <RefreshCw className="w-4 h-4" />
-                          )}
-                        </button>
-                        <button
-                          onClick={() => handleRemoveUrl(urlItem.id)}
-                          className="p-1 text-red-600 hover:text-red-800 dark:text-red-400 dark:hover:text-red-300"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  From Email
+                </label>
+                <input
+                  type="email"
+                  placeholder="noreply@yourdomain.com"
+                  className="input-field"
+                />
               </div>
-            )}
 
-            {/* Web Scraping Settings */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  Cache Timeout (hours)
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  From Name
                 </label>
                 <input
-                  type="number"
-                  value={localSettings.webScraping.cacheTimeout / 3600000}
-                  onChange={(e) => handleWebScrapingChange('cacheTimeout', parseInt(e.target.value) * 3600000)}
-                  min="1"
-                  max="168"
+                  type="text"
+                  placeholder="Your Company Name"
                   className="input-field"
                 />
               </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  Request Timeout (seconds)
-                </label>
-                <input
-                  type="number"
-                  value={localSettings.webScraping.requestTimeout / 1000}
-                  onChange={(e) => handleWebScrapingChange('requestTimeout', parseInt(e.target.value) * 1000)}
-                  min="5"
-                  max="60"
-                  className="input-field"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  Max URLs
-                </label>
-                <input
-                  type="number"
-                  value={localSettings.webScraping.maxUrls}
-                  onChange={(e) => handleWebScrapingChange('maxUrls', parseInt(e.target.value))}
-                  min="1"
-                  max="50"
-                  className="input-field"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  Max Content Length (KB)
-                </label>
-                <input
-                  type="number"
-                  value={localSettings.webScraping.maxContentLength / 1000}
-                  onChange={(e) => handleWebScrapingChange('maxContentLength', parseInt(e.target.value) * 1000)}
-                  min="50"
-                  max="1000"
-                  className="input-field"
-                />
-                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                  Smart extraction will prioritize key content for large pages
-                </p>
-              </div>
-            </div>
 
-            {/* Info Message */}
-            <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
-              <div className="flex">
-                <div className="flex-shrink-0">
-                  <Globe className="h-5 w-5 text-blue-400" />
-                </div>
-                <div className="ml-3">
-                  <h3 className="text-sm font-medium text-blue-800 dark:text-blue-200">
-                    Web Scraping Information
-                  </h3>
-                  <div className="mt-2 text-sm text-blue-700 dark:text-blue-300">
-                    <p>
-                      When enabled, the AI can access and search content from the configured URLs. 
-                      Content is cached for the specified timeout period to avoid repeated requests. 
-                      The AI will search both uploaded documents and web content when answering questions.
-                    </p>
-                  </div>
-                </div>
+              <div className="flex justify-between items-center pt-2">
+                <button className="btn-ghost text-sm px-3 py-2">
+                  Test Connection
+                </button>
+                <button className="btn-primary text-sm px-3 py-2">
+                  Save Configuration
+                </button>
               </div>
             </div>
           </div>
-        )}
+
+          {/* Mailgun Configuration */}
+          <div className="border border-gray-200 dark:border-gray-700 rounded-xl p-4">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center space-x-3">
+                <div className="w-10 h-10 bg-orange-100 dark:bg-orange-900/20 rounded-lg flex items-center justify-center">
+                  <Mail className="w-5 h-5 text-orange-600" />
+                </div>
+                <div>
+                  <h4 className="font-medium text-gray-900 dark:text-white">Mailgun</h4>
+                  <p className="text-sm text-gray-500">Developer-friendly email service</p>
+                </div>
+              </div>
+              <div className="flex items-center space-x-2">
+                <span className="px-2 py-1 bg-green-100 dark:bg-green-900/20 text-green-600 dark:text-green-400 text-xs rounded-full">
+                  ✓ Configured
+                </span>
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  API Key
+                </label>
+                <div className="relative">
+                  <input
+                    type="password"
+                    value="key-************************"
+                    className="input-field pr-10"
+                    readOnly
+                  />
+                  <button className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600">
+                    <EyeOff className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  Domain
+                </label>
+                <input
+                  type="text"
+                  value="mg.yourdomain.com"
+                  className="input-field"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  From Email
+                </label>
+                <input
+                  type="email"
+                  value="campaigns@yourdomain.com"
+                  className="input-field"
+                />
+              </div>
+
+              <div className="flex justify-between items-center pt-2">
+                <button className="text-red-600 hover:text-red-700 text-sm px-3 py-2 flex items-center">
+                  <Trash2 className="w-4 h-4 mr-1" />
+                  Remove
+                </button>
+                <button className="btn-secondary text-sm px-3 py-2">
+                  Update Configuration
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* AWS SES Configuration */}
+          <div className="border border-gray-200 dark:border-gray-700 rounded-xl p-4">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center space-x-3">
+                <div className="w-10 h-10 bg-yellow-100 dark:bg-yellow-900/20 rounded-lg flex items-center justify-center">
+                  <Mail className="w-5 h-5 text-yellow-600" />
+                </div>
+                <div>
+                  <h4 className="font-medium text-gray-900 dark:text-white">AWS SES</h4>
+                  <p className="text-sm text-gray-500">Amazon Simple Email Service</p>
+                </div>
+              </div>
+              <div className="flex items-center space-x-2">
+                <span className="px-2 py-1 bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 text-xs rounded-full">
+                  Not Configured
+                </span>
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  Access Key ID
+                </label>
+                <input
+                  type="text"
+                  placeholder="Your AWS Access Key ID"
+                  className="input-field"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  Secret Access Key
+                </label>
+                <div className="relative">
+                  <input
+                    type="password"
+                    placeholder="Your AWS Secret Access Key"
+                    className="input-field pr-10"
+                  />
+                  <button className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600">
+                    <Eye className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  Region
+                </label>
+                <select className="input-field">
+                  <option value="">Select Region</option>
+                  <option value="us-east-1">US East (N. Virginia)</option>
+                  <option value="us-west-2">US West (Oregon)</option>
+                  <option value="eu-west-1">Europe (Ireland)</option>
+                  <option value="ap-southeast-1">Asia Pacific (Singapore)</option>
+                </select>
+              </div>
+
+              <div className="flex justify-between items-center pt-2">
+                <button className="btn-ghost text-sm px-3 py-2">
+                  Test Connection
+                </button>
+                <button className="btn-primary text-sm px-3 py-2">
+                  Save Configuration
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* SMTP Configuration */}
+          <div className="border border-gray-200 dark:border-gray-700 rounded-xl p-4">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center space-x-3">
+                <div className="w-10 h-10 bg-purple-100 dark:bg-purple-900/20 rounded-lg flex items-center justify-center">
+                  <Server className="w-5 h-5 text-purple-600" />
+                </div>
+                <div>
+                  <h4 className="font-medium text-gray-900 dark:text-white">SMTP</h4>
+                  <p className="text-sm text-gray-500">Custom SMTP server</p>
+                </div>
+              </div>
+              <div className="flex items-center space-x-2">
+                <span className="px-2 py-1 bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 text-xs rounded-full">
+                  Not Configured
+                </span>
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                    Host
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="smtp.example.com"
+                    className="input-field"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                    Port
+                  </label>
+                  <input
+                    type="number"
+                    placeholder="587"
+                    className="input-field"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                    Username
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="your-email@example.com"
+                    className="input-field"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                    Password
+                  </label>
+                  <div className="relative">
+                    <input
+                      type="password"
+                      placeholder="Your password"
+                      className="input-field pr-10"
+                    />
+                    <button className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600">
+                      <Eye className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex items-center space-x-4">
+                <label className="flex items-center space-x-2">
+                  <input
+                    type="checkbox"
+                    className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                  />
+                  <span className="text-sm text-gray-700 dark:text-gray-300">Use TLS</span>
+                </label>
+                <label className="flex items-center space-x-2">
+                  <input
+                    type="checkbox"
+                    className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                  />
+                  <span className="text-sm text-gray-700 dark:text-gray-300">Use SSL</span>
+                </label>
+              </div>
+
+              <div className="flex justify-between items-center pt-2">
+                <button className="btn-ghost text-sm px-3 py-2">
+                  Test Connection
+                </button>
+                <button className="btn-primary text-sm px-3 py-2">
+                  Save Configuration
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Email Configuration Help */}
+        <div className="mt-6 p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
+          <div className="flex items-start space-x-3">
+            <Mail className="w-5 h-5 text-blue-600 mt-0.5" />
+            <div>
+              <h4 className="font-medium text-blue-900 dark:text-blue-300 mb-2">Email Provider Setup Tips</h4>
+              <ul className="text-sm text-blue-700 dark:text-blue-300 space-y-1">
+                <li>• <strong>SendGrid:</strong> Get API key from SendGrid dashboard → Settings → API Keys</li>
+                <li>• <strong>Mailgun:</strong> Find API key and domain in Mailgun dashboard → Domains</li>
+                <li>• <strong>AWS SES:</strong> Create IAM user with SES permissions and get access keys</li>
+                <li>• <strong>SMTP:</strong> Use your existing email server credentials</li>
+              </ul>
+            </div>
+          </div>
+        </div>
       </div>
 
       {/* Action Buttons */}
@@ -1112,7 +1066,7 @@ const AdminSettings = () => {
         >
           Reset to Defaults
         </button>
-        
+
         <div className="flex items-center space-x-2">
           <button
             onClick={handleSave}

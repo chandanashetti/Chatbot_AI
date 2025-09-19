@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { useSelector, useDispatch } from 'react-redux'
 import { RootState } from '../../store/store'
 import { updateBotSettings } from '../../store/slices/botSlice'
+import { botsAPI } from '../../services/api'
 import {
   ArrowLeft,
   Save,
@@ -151,11 +152,27 @@ const BotSettings = () => {
     setSettings(newSettings)
   }, [bot, navigate])
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!bot) return
-    
-    dispatch(updateBotSettings({ botId: bot.id, settings }))
-    toast.success('Widget settings saved successfully!')
+
+    try {
+      // Merge the new settings with existing bot settings to avoid overwriting other settings
+      const updatedSettings = {
+        ...bot.settings,
+        appearance: settings.appearance
+      }
+
+      // Call API to save settings to backend
+      await botsAPI.updateBotSettings(bot.id, updatedSettings)
+
+      // Update Redux state
+      dispatch(updateBotSettings({ botId: bot.id, settings: updatedSettings }))
+
+      toast.success('Widget settings saved successfully!')
+    } catch (error: any) {
+      console.error('Failed to save widget settings:', error)
+      toast.error(error.response?.data?.error || 'Failed to save widget settings')
+    }
   }
 
   const handleReset = () => {

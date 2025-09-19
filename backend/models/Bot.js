@@ -8,11 +8,11 @@ const botNodeSchema = new mongoose.Schema({
     required: true,
     enum: [
       // Basic nodes
-      'message', 'question', 'condition', 'action', 'webhook', 'handoff',
+      'start', 'message', 'question', 'condition', 'action', 'webhook', 'handoff',
       // Additional flow nodes
       'quick_replies', 'input', 'random', 'delay', 'variable', 'validation',
       // AI & Intelligence nodes
-      'ai_response', 'intent_recognition', 'entity_extraction', 'sentiment_analysis', 
+      'ai_response', 'intent_recognition', 'entity_extraction', 'sentiment_analysis',
       'language_detection', 'translation',
       // Media nodes
       'image', 'video', 'audio', 'document',
@@ -242,6 +242,12 @@ const botSettingsSchema = new mongoose.Schema({
       topK: { type: Number, default: 5 },
       scoreThreshold: { type: Number, default: 0.7 }
     }
+  },
+  webScraping: {
+    enabled: { type: Boolean, default: true },
+    sources: [String], // URLs to scrape
+    updateFrequency: { type: String, enum: ['daily', 'weekly', 'monthly'], default: 'weekly' },
+    lastUpdated: Date
   }
 }, { _id: false });
 

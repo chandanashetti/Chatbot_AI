@@ -1,22 +1,113 @@
 import { useSelector } from 'react-redux'
 import { RootState } from '../../store/store'
-import { 
-  MessageSquare, 
-  Users, 
-  Clock, 
-  TrendingUp, 
+import {
+  MessageSquare,
+  Users,
+  Clock,
+  TrendingUp,
   Activity,
   Bot,
   CheckCircle,
   AlertCircle,
   Headphones,
-  Circle
+  Circle,
+  BarChart3,
+  AlertTriangle,
+  HelpCircle,
+  Heart,
+  ShoppingCart,
+  Package,
+  Wrench,
+  Hash
 } from 'lucide-react'
+import { useState, useEffect } from 'react'
 
 const Dashboard = () => {
   const { } = useSelector((state: RootState) => state.analytics)
   const { integrations } = useSelector((state: RootState) => state.integrations)
   const { documents } = useSelector((state: RootState) => state.knowledgeBase)
+
+  const [chatCategories, setChatCategories] = useState({
+    complaints: { count: 0, percentage: 0 },
+    queries: { count: 0, percentage: 0 },
+    feedback: { count: 0, percentage: 0 },
+    purchase: { count: 0, percentage: 0 },
+    order_related: { count: 0, percentage: 0 },
+    support: { count: 0, percentage: 0 },
+    general: { count: 0, percentage: 0 }
+  })
+  const [isLoadingCategories, setIsLoadingCategories] = useState(true)
+
+  // Fetch chat categories data
+  useEffect(() => {
+    const fetchChatCategories = async () => {
+      try {
+        setIsLoadingCategories(true)
+        const response = await fetch('/api/analytics/chat-categories')
+        const data = await response.json()
+
+        if (data.success) {
+          setChatCategories(data.data.categories)
+        } else {
+          console.error('Failed to fetch chat categories:', data.error)
+          // Keep default empty categories instead of showing fake data
+        }
+      } catch (error) {
+        console.error('Error fetching chat categories:', error)
+        // Keep default empty categories instead of showing fake data
+      } finally {
+        setIsLoadingCategories(false)
+      }
+    }
+
+    fetchChatCategories()
+  }, [])
+
+  // Category display config
+  const categoryConfig = {
+    complaints: {
+      label: 'Complaints',
+      icon: AlertTriangle,
+      color: 'text-red-600',
+      bgColor: 'bg-red-100 dark:bg-red-900/20'
+    },
+    queries: {
+      label: 'General Queries',
+      icon: HelpCircle,
+      color: 'text-blue-600',
+      bgColor: 'bg-blue-100 dark:bg-blue-900/20'
+    },
+    feedback: {
+      label: 'Feedback',
+      icon: Heart,
+      color: 'text-pink-600',
+      bgColor: 'bg-pink-100 dark:bg-pink-900/20'
+    },
+    purchase: {
+      label: 'Purchase',
+      icon: ShoppingCart,
+      color: 'text-green-600',
+      bgColor: 'bg-green-100 dark:bg-green-900/20'
+    },
+    order_related: {
+      label: 'Order Related',
+      icon: Package,
+      color: 'text-orange-600',
+      bgColor: 'bg-orange-100 dark:bg-orange-900/20'
+    },
+    support: {
+      label: 'Support',
+      icon: Wrench,
+      color: 'text-purple-600',
+      bgColor: 'bg-purple-100 dark:bg-purple-900/20'
+    },
+    general: {
+      label: 'General',
+      icon: Hash,
+      color: 'text-gray-600',
+      bgColor: 'bg-gray-100 dark:bg-gray-700'
+    }
+  }
 
   // Mock data for demo
   const stats = {
@@ -349,6 +440,78 @@ const Dashboard = () => {
         </div>
       </div>
 
+      {/* Chat Categories Section */}
+      <div className="card p-6 mb-8">
+        <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-6 flex items-center">
+          <BarChart3 className="w-5 h-5 mr-2 text-primary-600" />
+          Chat Categories
+          <span className="ml-3 px-2 py-1 text-xs bg-blue-100 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 rounded-full font-medium">
+            🤖 AI Powered
+          </span>
+        </h3>
+        {isLoadingCategories ? (
+          <div className="flex items-center justify-center py-8">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600"></div>
+            <span className="ml-3 text-gray-600 dark:text-gray-400">Loading categories...</span>
+          </div>
+        ) : (
+          <>
+            {Object.values(chatCategories).every(cat => cat.count === 0) ? (
+              <div className="text-center py-8">
+                <div className="text-gray-400 dark:text-gray-500 mb-4">
+                  <BarChart3 className="w-12 h-12 mx-auto mb-3 opacity-50" />
+                </div>
+                <h4 className="text-lg font-medium text-gray-600 dark:text-gray-400 mb-2">
+                  No Conversations Yet
+                </h4>
+                <p className="text-sm text-gray-500 dark:text-gray-400">
+                  Start chatting with your bot to see AI-powered categorization in action
+                </p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                {Object.entries(chatCategories).map(([key, category]) => {
+                  const config = categoryConfig[key as keyof typeof categoryConfig]
+                  const IconComponent = config.icon
+
+                  return (
+                    <div
+                      key={key}
+                      className="p-4 bg-gray-50 dark:bg-gray-700 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors duration-200"
+                    >
+                      <div className="flex items-center justify-between mb-3">
+                        <div className={`p-2 rounded-lg ${config.bgColor}`}>
+                          <IconComponent className={`w-5 h-5 ${config.color}`} />
+                        </div>
+                        <span className="text-xs text-gray-500 dark:text-gray-400 font-medium">
+                          {category.percentage}%
+                        </span>
+                      </div>
+                      <div>
+                        <p className="text-sm font-medium text-gray-600 dark:text-gray-400 mb-1">
+                          {config.label}
+                        </p>
+                        <p className="text-2xl font-bold text-gray-900 dark:text-white">
+                          {category.count.toLocaleString()}
+                        </p>
+                      </div>
+                      <div className="mt-3">
+                        <div className="w-full bg-gray-200 dark:bg-gray-600 rounded-full h-2">
+                          <div
+                            className={`h-2 rounded-full ${config.color.replace('text-', 'bg-')}`}
+                            style={{ width: `${Math.min(category.percentage, 100)}%` }}
+                          ></div>
+                        </div>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </>
+        )}
+      </div>
+
       {/* Integration Status */}
       <div className="card p-6">
         <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-6 flex items-center">
@@ -373,7 +536,7 @@ const Dashboard = () => {
                 </div>
               </div>
               <div className={`px-3 py-1 rounded-full text-xs font-semibold ${
-                integration.isActive 
+                integration.isActive
                   ? 'bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-400'
                   : 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300'
               }`}>

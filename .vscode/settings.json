@@ -17,5 +17,6 @@
     "**/node_modules/**",
     "**/.hg/**",
     "**/.svn/**"
-  ]
+  ],
+  "json.schemaDownload.enable": true
 }

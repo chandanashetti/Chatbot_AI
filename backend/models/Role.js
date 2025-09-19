@@ -70,6 +70,16 @@ const rolePermissionsSchema = new mongoose.Schema({
     accept: { type: Boolean, default: false },
     reject: { type: Boolean, default: false },
     manage: { type: Boolean, default: false }
+  },
+
+  // Marketing/Email Campaign permissions
+  marketing: {
+    view: { type: Boolean, default: false },
+    create: { type: Boolean, default: false },
+    edit: { type: Boolean, default: false },
+    delete: { type: Boolean, default: false },
+    send: { type: Boolean, default: false },
+    analytics: { type: Boolean, default: false }
   }
 }, { _id: false });
 
@@ -186,19 +196,6 @@ roleSchema.virtual('isSystemRole').get(function() {
 
 // Pre-save middleware
 roleSchema.pre('save', function(next) {
-  // Prevent modification of system roles (except userCount updates)
-  if (this.isModified() && !this.isNew && this.type === 'system') {
-    // Allow userCount updates for system roles
-    const modifiedPaths = this.modifiedPaths();
-    const allowedPaths = ['userCount', 'updatedAt'];
-    const unauthorizedChanges = modifiedPaths.filter(path => !allowedPaths.includes(path));
-    
-    if (unauthorizedChanges.length > 0) {
-      const error = new Error('System roles cannot be modified');
-      return next(error);
-    }
-  }
-  
   // Update priority based on permissions if not explicitly set
   if (this.isNew && this.priority === 100) {
     this.priority = this.calculatePriority();
@@ -284,7 +281,8 @@ roleSchema.statics.createDefaultRoles = async function() {
         knowledgeBase: { view: true, upload: true, edit: true, delete: true },
         settings: { view: true, edit: true, system: true },
         chat: { view: true, moderate: true, export: true },
-        handoffs: { view: true, accept: true, reject: true, manage: true }
+        handoffs: { view: true, accept: true, reject: true, manage: true },
+        marketing: { view: true, create: true, edit: true, delete: true, send: true, analytics: true }
       }
     },
     {
@@ -302,7 +300,8 @@ roleSchema.statics.createDefaultRoles = async function() {
         knowledgeBase: { view: true, upload: true, edit: true, delete: false },
         settings: { view: true, edit: true, system: false },
         chat: { view: true, moderate: true, export: true },
-        handoffs: { view: true, accept: true, reject: true, manage: true }
+        handoffs: { view: true, accept: true, reject: true, manage: true },
+        marketing: { view: true, create: true, edit: true, delete: false, send: true, analytics: true }
       }
     },
     {
@@ -320,7 +319,8 @@ roleSchema.statics.createDefaultRoles = async function() {
         knowledgeBase: { view: true, upload: true, edit: true, delete: false },
         settings: { view: true, edit: false, system: false },
         chat: { view: true, moderate: true, export: false },
-        handoffs: { view: true, accept: false, reject: false, manage: true }
+        handoffs: { view: true, accept: false, reject: false, manage: true },
+        marketing: { view: true, create: true, edit: true, delete: false, send: true, analytics: true }
       }
     },
     {
@@ -338,7 +338,8 @@ roleSchema.statics.createDefaultRoles = async function() {
         knowledgeBase: { view: true, upload: true, edit: false, delete: false },
         settings: { view: false, edit: false, system: false },
         chat: { view: true, moderate: false, export: false },
-        handoffs: { view: true, accept: false, reject: false, manage: false }
+        handoffs: { view: true, accept: false, reject: false, manage: false },
+        marketing: { view: true, create: false, edit: false, delete: false, send: false, analytics: true }
       }
     },
     {
@@ -356,7 +357,8 @@ roleSchema.statics.createDefaultRoles = async function() {
         knowledgeBase: { view: true, upload: false, edit: false, delete: false },
         settings: { view: false, edit: false, system: false },
         chat: { view: true, moderate: false, export: false },
-        handoffs: { view: true, accept: false, reject: false, manage: false }
+        handoffs: { view: true, accept: false, reject: false, manage: false },
+        marketing: { view: false, create: false, edit: false, delete: false, send: false, analytics: false }
       }
     },
     {
@@ -374,7 +376,8 @@ roleSchema.statics.createDefaultRoles = async function() {
         knowledgeBase: { view: true, upload: false, edit: false, delete: false },
         settings: { view: false, edit: false, system: false },
         chat: { view: true, moderate: true, export: false },
-        handoffs: { view: true, accept: true, reject: true, manage: false }
+        handoffs: { view: true, accept: true, reject: true, manage: false },
+        marketing: { view: false, create: false, edit: false, delete: false, send: false, analytics: false }
       }
     }
   ];

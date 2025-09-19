@@ -110,7 +110,25 @@ export const usePermissions = (): PermissionCheck => {
       
       // Chat review
       'chatReview': ['superadministrator', 'admin', 'manager'],
-      'chatReview.export': ['superadministrator', 'admin', 'manager']
+      'chatReview.export': ['superadministrator', 'admin', 'manager'],
+      
+      // Email Campaigns / Marketing
+      'emailCampaigns': ['superadministrator', 'admin', 'manager', 'operator'],
+      'emailCampaigns.view': ['superadministrator', 'admin', 'manager', 'operator'],
+      'emailCampaigns.create': ['superadministrator', 'admin', 'manager'],
+      'emailCampaigns.edit': ['superadministrator', 'admin', 'manager'],
+      'emailCampaigns.delete': ['superadministrator', 'admin'],
+      'emailCampaigns.send': ['superadministrator', 'admin', 'manager'],
+      'emailCampaigns.analytics': ['superadministrator', 'admin', 'manager', 'operator'],
+      
+      // Marketing (alias for emailCampaigns for backend compatibility)
+      'marketing': ['superadministrator', 'admin', 'manager', 'operator'],
+      'marketing.view': ['superadministrator', 'admin', 'manager', 'operator'],
+      'marketing.create': ['superadministrator', 'admin', 'manager'],
+      'marketing.edit': ['superadministrator', 'admin', 'manager'],
+      'marketing.delete': ['superadministrator', 'admin'],
+      'marketing.send': ['superadministrator', 'admin', 'manager'],
+      'marketing.analytics': ['superadministrator', 'admin', 'manager', 'operator']
     }
     
     const allowedRoles = accessRules[resource]

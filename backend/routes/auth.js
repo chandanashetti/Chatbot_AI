@@ -587,9 +587,15 @@ router.get('/me', authenticate, populateUserPermissions, async (req, res) => {
       });
     }
     
+    // Include permissions populated by middleware
+    const userWithPermissions = {
+      ...user,
+      permissions: req.user.permissions
+    };
+
     res.json({
       success: true,
-      data: { user }
+      data: { user: userWithPermissions }
     });
   } catch (error) {
     console.error('❌ Error fetching user profile:', error);
@@ -604,8 +610,22 @@ router.get('/me', authenticate, populateUserPermissions, async (req, res) => {
   }
 });
 
+// GET /api/auth/check-permissions - Temporary debug endpoint
+router.get('/check-permissions', authenticate, populateUserPermissions, async (req, res) => {
+  res.json({
+    success: true,
+    data: {
+      userId: req.user.id,
+      email: req.user.email,
+      role: req.user.role,
+      permissions: req.user.permissions,
+      hasMarketingView: req.user.permissions?.marketing?.view
+    }
+  });
+});
+
 // PUT /api/auth/profile - Update current user profile
-router.put('/profile', async (req, res) => {
+router.put('/profile', authenticate, async (req, res) => {
   try {
     console.log('👤 Updating user profile...');
     

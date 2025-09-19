@@ -13,7 +13,10 @@
       "Bash(find:*)",
       "Bash(PORT=5001 node server.js)",
       "Bash(tasklist:*)",
-      "Bash(python:*)"
+      "Bash(python:*)",
+      "Read(//d/**)",
+      "Bash(del test-permissions.js)",
+      "Bash(cd:*)"
     ],
     "deny": [],
     "ask": []

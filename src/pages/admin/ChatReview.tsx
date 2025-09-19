@@ -1661,7 +1661,7 @@ const ChatReview = () => {
           </div>
 
           {/* Chat list - Scrollable */}
-          <div 
+          <div
             ref={chatListRef}
             className="flex-1 overflow-y-auto p-4 scrollbar-thin smooth-scroll"
           >
@@ -1780,7 +1780,7 @@ const ChatReview = () => {
 
       {/* Right side - Chat detail */}
       <div className="flex-1 p-4">
-        {selectedChat ? (
+          {selectedChat ? (
           <div className="h-full flex flex-col">
             {/* Chat header */}
             <div className="pb-4 mb-4 border-b border-gray-200 dark:border-gray-700">
@@ -1891,7 +1891,7 @@ const ChatReview = () => {
             {(() => {
               const ticket = getTicketForChat(selectedChat.id);
               if (!ticket) return null;
-              
+
               return (
                 <div className="mb-4 p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
                   <div className="flex items-center justify-between mb-3">
@@ -1994,7 +1994,7 @@ const ChatReview = () => {
 
             {/* Chat messages - Scrollable */}
             <div className="flex-1 relative">
-              <div 
+              <div
                 ref={messagesContainerRef}
                 className="h-full overflow-y-auto px-4 py-2 space-y-4 scrollbar-messages smooth-scroll"
               >
@@ -2030,7 +2030,7 @@ const ChatReview = () => {
               {/* Scroll anchor */}
               <div ref={messagesEndRef} />
               </div>
-              
+
               {/* Scroll to bottom button */}
               {showScrollButton && (
                 <button

@@ -75,7 +75,15 @@ const PERMISSIONS = {
   'handoffs.view': ['superadministrator', 'admin', 'manager', 'agent'],
   'handoffs.accept': ['superadministrator', 'admin', 'agent'],
   'handoffs.reject': ['superadministrator', 'admin', 'agent'],
-  'handoffs.manage': ['superadministrator', 'admin', 'manager']
+  'handoffs.manage': ['superadministrator', 'admin', 'manager'],
+
+  // Marketing/Email Campaign permissions
+  'marketing.view': ['superadministrator', 'admin', 'manager', 'operator'],
+  'marketing.create': ['superadministrator', 'admin', 'manager'],
+  'marketing.edit': ['superadministrator', 'admin', 'manager'],
+  'marketing.delete': ['superadministrator', 'admin'],
+  'marketing.send': ['superadministrator', 'admin', 'manager'],
+  'marketing.analytics': ['superadministrator', 'admin', 'manager', 'operator']
 };
 
 /**
